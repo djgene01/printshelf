@@ -32,7 +32,7 @@
 > **Status:** MVP complete and verified — **44 .NET tests** and **13 Playwright browser tests** passing.  
 > **Designed for:** a single Windows machine, a local PostgreSQL database, and a growing shelf of STL files. No cloud, no accounts, no telemetry.
 
-![PrintShelf catalogue](docs/screenshots/02-catalogue-grid.png)
+![PrintShelf catalogue](docs/screenshots/readme-catalogue.png)
 
 ## Why PrintShelf
 
@@ -50,7 +50,7 @@ Most STL folders become a graveyard of filenames. PrintShelf treats a print libr
 ### Catalogue
 
 <p align="center">
-  <img src="docs/screenshots/02-catalogue-grid.png" alt="Catalogue grid with category-coloured thumbnails" width="100%">
+  <img src="docs/screenshots/readme-catalogue.png" alt="Catalogue grid with category-coloured thumbnails" width="100%">
 </p>
 
 <p align="center"><em>Every card carries its category colour, dimensions, tags, file size, and print count.</em></p>

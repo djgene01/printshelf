@@ -10,7 +10,7 @@ PrintShelf/
 ├── src/
 │   ├── PrintShelf.Web/            # Blazor Server app (net10.0)
 │   │   ├── Components/            # App, Routes, Layouts, Pages
-│   │   ├── Services/              # IngestService, CatalogService, PrintRunService
+│   │   ├── Services/              # Ingest, Catalog, PrintRun, Category, Slicer
 │   │   ├── Data/                  # AppDbContext, Entities/, Migrations/
 │   │   └── wwwroot/
 │   │       ├── css/app.css        # Tailwind output
@@ -129,6 +129,12 @@ Kestrel/Blazor limits to configure at P1: `MultipartBodyLengthLimit`,
   this, valid files render as a black silhouette.
 - No STL parsing in the browser except three.js's own STLLoader — the
   server parser (P2) is the authority for stats.
+- **Desktop slicer hand-off (P3):** `SlicerLocator` probes the standard
+  OrcaSlicer, PrusaSlicer, and Cura install directories (or explicit
+  `Slicers:*Path` settings / `PRINTSHELF_*_PATH` env vars). On the model page,
+  `SlicerLaunchService` resolves the model's SHA to its stored STL and starts
+  the chosen executable with the file path — never a browser-supplied path and
+  never through a shell. Missing installs are shown as unavailable.
 
 ## 7. Deferred auth seam (P7, D5)
 

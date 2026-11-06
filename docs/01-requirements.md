@@ -52,6 +52,7 @@ search, tags, a 3D preview in the browser, and print-run history per model.
 | FR-11 | UI usable on desktop and phone widths (Tailwind responsive) | all |
 | FR-12 | User can create/rename/delete categories and set a material colour per category; models render in that colour | P1/P3 |
 | FR-13 | Select multiple models in the catalogue and assign them to a category in one action | P1 |
+| FR-14 | Launch a model in an installed desktop slicer — OrcaSlicer, PrusaSlicer, or Cura — choosing the app | P3 |
 
 ## 4. Non-functional requirements
 

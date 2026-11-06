@@ -17,7 +17,7 @@ checklist in [07-risks-and-acceptance.md](07-risks-and-acceptance.md).
 | **P0** Scaffold | ✅ | Solution builds with 0 warnings; `/health` 200; Tailwind CSS served (40 KB); EF migration applied to PostgreSQL; test projects wired |
 | **P1** Catalogue + upload | ✅ | Upload → list → edit → tag → soft delete round-trip; non-STL rejected; 200 MB limit enforced through Kestrel **and** the SignalR circuit; tags CRUD; **Categories** page (create/rename/delete, material colour), category assignment on Upload/Edit, and catalogue bulk-select → assign category |
 | **P2** STL ingest | ✅ | Dependency-free binary + ASCII parser; 15 golden-fixture tests; SHA-256 dedupe (keep-both/skip); content-addressed files; integrity scan finds orphans and dangling rows |
-| **P3** 3D preview | ✅ | Locally vendored three.js 0.187.0; `/files/{id}`; camera fit + Z-up rotation; studio lighting + ground shadow; zero-length STL normals rebuilt (fixes black models); thumbnail captured on first preview; **Previews** page batch-renders all missing thumbnails and can regenerate all; 1600×1200 `Save PNG` |
+| **P3** 3D preview | ✅ | Locally vendored three.js 0.187.0; `/files/{id}`; camera fit + Z-up rotation; studio lighting + ground shadow; zero-length STL normals rebuilt (fixes black models); thumbnail captured on first preview; **Previews** page batch-renders all missing thumbnails and can regenerate all; 1600×1200 `Save PNG`; **Open in slicer** detects OrcaSlicer / PrusaSlicer / Cura and launches the stored STL in the chosen app |
 | **P4** Search/views | ✅ | ILIKE search over name/description/tags, category + tag facets, 4 sorts, grid/list toggle, empty states; 1000-row seed; query latency measured |
 | **P5** Print-run log | ✅ | `print_runs` CRUD on the model page, DB check constraint on `Result`, aggregate cards, dashboard "Most printed" |
 | **P6** Export/purge/deploy | ✅ | UTF-8 BOM CSV for models + print runs; hard purge of rows/files/thumbs; backup + restore drill; published Production build served |
@@ -35,8 +35,8 @@ dotnet build PrintShelf.slnx
 # All automated tests
 dotnet test PrintShelf.slnx
 # → PrintShelf.Stl.Tests      15 passed
-# → PrintShelf.Web.Tests      29 passed   (17 component/service + 12 integration)
-#   total 44 passed, 0 failed
+# → PrintShelf.Web.Tests      32 passed   (19 component/service + 13 integration)
+#   total 47 passed, 0 failed
 
 # Tailwind (v4.3.4 standalone CLI)
 ./tools/tailwindcss.exe -i tailwind/input.css -o src/PrintShelf.Web/wwwroot/css/app.css --minify
@@ -55,7 +55,8 @@ database** (`printshelf_test`, recreated per run via
 `PRINTSHELF_TEST_CONN`). They cover ingest stats, duplicate keep-both,
 truncated/oversize rejection, search/filter/sort, soft delete → restore →
 purge, print-run CRUD/aggregates, category CRUD/rename/colour, bulk category
-assignment to selected model IDs, orphan +
+assignment to selected model IDs, slicer executable detection and launch
+argument resolution, orphan +
 dangling integrity reports, CSV encoding/row counts, and the 1000-row latency
 budget.
 
@@ -64,8 +65,8 @@ budget.
 | Layer | Tests | What it proves |
 |---|---:|---|
 | `PrintShelf.Stl.Tests` (xUnit) | 15 | Binary/ASCII agreement (10×10×10 mm, 1000 mm³), truncated, lying header, NaN, binary-with-`solid` header, zero triangles, inverted winding, 100k budget |
-| Component/service (bUnit + pure) | 17 | Toolbar filters/events, cards/thumbnails, two-click confirm, upload validation, tag slug, hand-computed print aggregate |
-| Integration (EF Core + PostgreSQL) | 12 | Real Npgsql types, transactions, dedupe, integrity, CSV, latency, category CRUD/rename/colour, bulk category assignment |
+| Component/service (bUnit + pure) | 19 | Toolbar filters/events, cards/thumbnails, two-click confirm, upload validation, tag slug, hand-computed print aggregate, slicer path detection |
+| Integration (EF Core + PostgreSQL) | 13 | Real Npgsql types, transactions, dedupe, integrity, CSV, latency, category CRUD/rename/colour, bulk category assignment, slicer launch argument resolution |
 | E2E (Playwright/Chromium) | 13 | Dashboard, search/filter/sort/list, upload → preview → thumbnail → Save PNG, zero-normal STL brightness, duplicate prompt, print-run edit/delete, tags CRUD, category + red material colour → upload → preview, bulk-assign two models, CSV, mobile 390 px, admin integrity/purge |
 
 ## 3. Performance evidence
@@ -139,7 +140,7 @@ dotnet publish src/PrintShelf.Web -c Release -o publish -r win-x64 --self-contai
 
 | # | Check | Status |
 |---|---|---|
-| 1 | `dotnet build` + `dotnet test` clean on .NET 10 | ✅ 0 warnings/errors; 44 tests pass |
+| 1 | `dotnet build` + `dotnet test` clean on .NET 10 | ✅ 0 warnings/errors; 47 tests pass |
 | 2 | Fresh DB → migrations → app on :5100 → `/health` | ✅ |
 | 3 | Real binary STL ≥ 50 MB + ASCII STL: correct stats, thumbnail, preview | ✅ (50.18 MB; ASCII 12 tris / 10 mm / 1000 mm³) |
 | 4 | Corrupt / oversize / duplicate designed behaviour | ✅ unit + integration + E2E |
@@ -150,6 +151,7 @@ dotnet publish src/PrintShelf.Web -c Release -o publish -r win-x64 --self-contai
 | 9 | Backup + restore drill | ✅ (see §5) |
 | 10 | App survives logoff/reboot via service mechanism | ⚠️ scripts ready and run script tested; task not registered / reboot not tested |
 | 11 | Localhost-only: external machine refused | ⚠️ bind address proves localhost only; no second PC available to test |
+| 12 | Open in slicer detects installed apps and launches the selected app with the stored STL | ✅ OrcaSlicer + Cura detected live; real Cura launch confirmed (process command line contained the stored STL); PrusaSlicer shown unavailable |
 
 ## 8. Screenshots
 
@@ -172,6 +174,8 @@ All screenshots are in [screenshots/](screenshots/):
 | `14-category-colour-preview.png` | Category material colour applied to the 3D preview |
 | `15-categories.png` | Category management — create, colour, rename, delete |
 | `16-bulk-category.png` | Catalogue bulk bar — selected models and target category |
+| `17-slicer-launch.png` | Open in slicer — detected apps and launch action |
+| `readme-catalogue.png`, `readme-slicer.png` | Curated README hero and slicer hand-off crop |
 
 ## 9. Known limitations / deviations
 
@@ -187,4 +191,8 @@ All screenshots are in [screenshots/](screenshots/):
 - The **50 MB acceptance file is generated on demand** into `.tmp/`, not
   committed (repository size). `tools/make_fixtures.py` regenerates the
   100k fixture.
+- **Slicer hand-off**: OrcaSlicer and Cura were detected on this host;
+  PrusaSlicer is not installed. A real Cura launch was verified — the spawned
+  process command line included the stored STL path. OrcaSlicer was detected
+  but not separately launched because a session was already open on the desktop.
 - Production logs keep EF command logging at `Warning` to avoid per-query noise.

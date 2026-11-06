@@ -15,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 // ---------------------------------------------------------------- options
 var storageOptions = builder.Configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions();
 var uploadOptions = builder.Configuration.GetSection("Upload").Get<UploadOptions>() ?? new UploadOptions();
+var slicerOptions = builder.Configuration.GetSection("Slicers").Get<SlicerOptions>() ?? new SlicerOptions();
 
 var connectionString = Environment.GetEnvironmentVariable("PRINTSHELF_CONN")
     ?? builder.Configuration.GetConnectionString("PrintShelf")
@@ -36,6 +37,9 @@ builder.Services.AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(connectionSt
 
 builder.Services.AddSingleton(storageOptions);
 builder.Services.AddSingleton(uploadOptions);
+builder.Services.AddSingleton(slicerOptions);
+builder.Services.AddSingleton<SlicerLocator>();
+builder.Services.AddSingleton<ISlicerProcessStarter, SlicerProcessStarter>();
 builder.Services.AddSingleton(sp => new StorageService(
     sp.GetRequiredService<StorageOptions>(),
     sp.GetRequiredService<IHostEnvironment>().ContentRootPath));
@@ -47,6 +51,7 @@ builder.Services.AddScoped<CategoryService>();
 builder.Services.AddScoped<TagService>();
 builder.Services.AddScoped<PrintRunService>();
 builder.Services.AddScoped<CsvExportService>();
+builder.Services.AddScoped<SlicerLaunchService>();
 
 // Upload size limits: Kestrel + form + circuit (docs/02 §5, P1 checklist).
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = uploadOptions.MaxBytes);

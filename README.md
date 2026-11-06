@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="Tests: 44 .NET + 13 E2E" src="https://img.shields.io/badge/tests-44%20.NET%20%2B%2013%20E2E-34d399?style=flat-square">
+  <img alt="Tests: 47 .NET + 13 E2E" src="https://img.shields.io/badge/tests-47%20.NET%20%2B%2013%20E2E-34d399?style=flat-square">
   <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white">
   <img alt="Blazor Server" src="https://img.shields.io/badge/Blazor-Server-5C2D91?style=flat-square&logo=blazor&logoColor=white">
   <img alt="PostgreSQL 17" src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white">
@@ -29,7 +29,7 @@
   <a href="docs/README.md">Documentation</a>
 </p>
 
-> **Status:** MVP complete and verified — **44 .NET tests** and **13 Playwright browser tests** passing.  
+> **Status:** MVP complete and verified — **47 .NET tests** and **13 Playwright browser tests** passing.
 > **Designed for:** a single Windows machine, a local PostgreSQL database, and a growing shelf of STL files. No cloud, no accounts, no telemetry.
 
 ![PrintShelf catalogue](docs/screenshots/readme-catalogue.png)
@@ -39,6 +39,7 @@
 Most STL folders become a graveyard of filenames. PrintShelf treats a print library like a real collection: visual, searchable, and pleasant to browse.
 
 - **See the model before you print it.** A locally vendored three.js viewer gives every STL a studio-lit preview with orbit controls and a soft ground shadow.
+- **Hand it straight to your slicer.** PrintShelf detects OrcaSlicer, PrusaSlicer, and Cura on the machine, then launches the stored STL in the app you choose — and marks missing installations unavailable.
 - **Thumbnails without a render farm.** The browser renders each preview and posts a PNG back to the app. There is no server-side rasterizer, no headless browser dependency, and no CDN asset.
 - **Categories with a point of view.** Give each category a material colour; the live viewer, saved PNG, and batch-generated thumbnail all use it. Select several models in the catalogue and move them in one action.
 - **A catalogue that behaves like an app.** Instant search, category and tag facets, four sort orders, grid/list views, duplicate detection, and a responsive layout down to phone width.
@@ -82,6 +83,12 @@ Most STL folders become a graveyard of filenames. PrintShelf treats a print libr
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/screenshots/readme-slicer.png" alt="Open in slicer card showing OrcaSlicer selected and Launch button" width="85%">
+</p>
+
+<p align="center"><em>Detected slicers appear in the picker; the stored STL opens in the app you choose.</em></p>
+
 ### The details
 
 | | |
@@ -89,6 +96,7 @@ Most STL folders become a graveyard of filenames. PrintShelf treats a print libr
 | **STL ingest** | Dependency-free binary and ASCII parser; exact triangle, bounding-box, and volume stats; 200 MB upload cap enforced through Kestrel and the SignalR circuit. |
 | **Deduplication** | SHA-256 content addressing; duplicate uploads can be skipped or kept as a second catalogue entry. |
 | **Search & facets** | Case-insensitive name, description, and tag search; category facets from the managed category list; sort by newest, oldest, name, file size, or build volume. |
+| **Desktop hand-off** | Auto-detects OrcaSlicer, PrusaSlicer, and Cura; launches the content-addressed STL in the selected app. Explicit `Slicers:*Path` / environment overrides for non-standard installs. |
 | **Print tracking** | Add, edit, and delete print runs; aggregate print counts and dashboard “most printed” views. |
 | **Exports & maintenance** | UTF-8 BOM CSV for models and print runs; integrity scan for orphan files/dangling rows; soft delete, restore, and hard purge. |
 | **Operational fit** | Localhost-only by default; publish script, Task Scheduler helper, and documented backup/restore drill. |
@@ -211,7 +219,7 @@ flowchart LR
 The repository contains the full test suite used to ship the build:
 
 ```bash
-# .NET: 15 parser tests + 17 component/service + 12 PostgreSQL integration tests
+# .NET: 15 parser tests + 19 component/service + 13 PostgreSQL integration tests
 dotnet test PrintShelf.slnx
 
 # Browser: 13 E2E tests, including upload → preview → thumbnail, categories,
@@ -228,8 +236,8 @@ Current verified result:
 
 ```text
 PrintShelf.Stl.Tests      15 passed
-PrintShelf.Web.Tests      29 passed
-Total                     44 passed
+PrintShelf.Web.Tests      32 passed
+Total                     47 passed
 
 Playwright                13 passed
 ```

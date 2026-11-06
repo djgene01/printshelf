@@ -3,6 +3,8 @@
 @inject PrintRunService Runs
 @inject CategoryService Categories
 @inject StorageService Storage
+@inject SlicerLocator SlicerLocator
+@inject SlicerLaunchService SlicerLauncher
 @inject NavigationManager Nav
 
 <PageTitle>@(_model?.Name ?? "Model") — PrintShelf</PageTitle>
@@ -31,6 +33,58 @@ else
 
     <div class="grid lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
         <div class="space-y-6 min-w-0">
+            <section class="card p-3" aria-labelledby="slicer-heading">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="min-w-0 flex-1">
+                        <h2 id="slicer-heading" class="text-sm font-semibold">Open in slicer</h2>
+                        <p class="text-xs text-slate-500">Send this STL to a desktop slicer on this PC.</p>
+                    </div>
+
+                    @if (_slicers.Any(s => s.Available))
+                    {
+                        <select class="input w-full sm:w-56" @bind="_slicerKey" aria-label="Slicer application">
+                            @foreach (var slicer in _slicers)
+                            {
+                                <option value="@slicer.Key" disabled="@(!slicer.Available)">
+                                    @slicer.Name@(slicer.Available ? "" : " — not installed")
+                                </option>
+                            }
+                        </select>
+                        <button type="button" class="btn-primary" data-testid="slicer-launch"
+                                disabled="@(!(SelectedSlicer?.Available ?? false) || _launching)"
+                                aria-busy="@_launching" @onclick="LaunchInSlicer">
+                            @(_launching ? "Opening…" : "Launch")
+                        </button>
+                    }
+                    else
+                    {
+                        <p class="text-xs text-amber-200">No supported slicer was detected on this PC.</p>
+                    }
+                </div>
+
+                @if (!_slicers.Any(s => s.Available))
+                {
+                    <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
+                        Install OrcaSlicer, PrusaSlicer, or Cura, or set an explicit executable path in
+                        <code class="text-slate-300">Slicers:OrcaPath</code>,
+                        <code class="text-slate-300">Slicers:PrusaPath</code>, or
+                        <code class="text-slate-300">Slicers:CuraPath</code>.
+                    </p>
+                }
+                else
+                {
+                    <p class="mt-2 text-[11px] text-slate-500" data-testid="slicer-detected">
+                        Detected on this PC: @string.Join(" · ", _slicers.Where(s => s.Available).Select(s => s.Name))
+                    </p>
+                }
+
+                @if (_slicerMessage is not null)
+                {
+                    <p class="mt-2 text-xs @(_slicerError ? "text-rose-300" : "text-emerald-300")"
+                       role="@(_slicerError ? "alert" : "status")">@_slicerMessage</p>
+                }
+            </section>
+
             <StlViewer ModelId="_model.Id" HasThumb="_hasThumb" MaterialColor="@_materialColor"
                        DownloadName="@($"{_model.Name}-preview.png")"
                        OnThumbnailCaptured="ThumbnailSaved" />
@@ -200,9 +254,19 @@ else
     private PrintAggregate _aggregate = new(0, 0, 0, 0, 0, 0, null);
     private IReadOnlyList<string> _printers = [];
     private IReadOnlyList<string> _materials = [];
+    private IReadOnlyList<SlicerInstall> _slicers = [];
+    private string _slicerKey = "";
+    private bool _launching;
+    private string? _slicerMessage;
+    private bool _slicerError;
+
+    private SlicerInstall? SelectedSlicer =>
+        _slicers.FirstOrDefault(s => string.Equals(s.Key, _slicerKey, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
+        _slicers = SlicerLocator.Detect();
+        _slicerKey = _slicers.FirstOrDefault(s => s.Available)?.Key ?? _slicers.FirstOrDefault()?.Key ?? "";
         await ReloadAsync();
         _printers = await Runs.SuggestPrintersAsync();
         _materials = await Runs.SuggestMaterialsAsync();
@@ -261,6 +325,20 @@ else
     {
         _hasThumb = true;
         return Task.CompletedTask;
+    }
+
+    private async Task LaunchInSlicer()
+    {
+        if (_launching || _model is null)
+            return;
+
+        _launching = true;
+        _slicerMessage = null;
+        _slicerError = false;
+        SlicerLaunchResult result = await SlicerLauncher.LaunchAsync(_model.Id, _slicerKey);
+        _slicerMessage = result.Message;
+        _slicerError = !result.Success;
+        _launching = false;
     }
 
     private static string ResultClass(string result) => result switch

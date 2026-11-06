@@ -449,6 +449,49 @@ public sealed class ServiceIntegrationTests(PostgresFixture postgres)
         await s.Catalog.PurgeAsync([first.Model.Id, second.Model.Id]);
     }
 
+    [Fact]
+    public async Task Slicer_launch_passes_stored_stl_to_selected_app()
+    {
+        var s = CreateServices();
+        var added = await IngestAsync(s, "cube.stl", "slicer-" + Guid.NewGuid().ToString("N")[..6]);
+        Assert.Equal(UploadStatus.Added, added.Status);
+
+        string directory = Path.Combine(Path.GetTempPath(), "printshelf-slicer-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string fakeExecutable = Path.Combine(directory, "orca-slicer.exe");
+        File.WriteAllText(fakeExecutable, "");
+
+        try
+        {
+            var locator = new SlicerLocator(new SlicerOptions { OrcaPath = fakeExecutable });
+            var starter = new RecordingSlicerStarter();
+            var slicer = new SlicerLaunchService(locator, s.DbFactory, s.Storage, starter);
+
+            var result = await slicer.LaunchAsync(added.Model!.Id, "orca");
+
+            Assert.True(result.Success, result.Message);
+            Assert.Equal(Path.GetFullPath(fakeExecutable), starter.ExecutablePath);
+            Assert.Equal(s.Storage.LibraryFileFor(added.Model.FileSha256.Trim()), starter.FilePath);
+        }
+        finally
+        {
+            await s.Catalog.PurgeAsync([added.Model!.Id]);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed class RecordingSlicerStarter : ISlicerProcessStarter
+    {
+        public string? ExecutablePath { get; private set; }
+        public string? FilePath { get; private set; }
+
+        public void Start(string executablePath, string filePath)
+        {
+            ExecutablePath = executablePath;
+            FilePath = filePath;
+        }
+    }
+
     private static async Task<int> CountModels(Services s)
     {
         await using var db = await s.DbFactory.CreateDbContextAsync();

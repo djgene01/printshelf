@@ -58,6 +58,25 @@ MVP has **no authentication** (D5). Therefore:
 - HTTPS on LAN: out of MVP scope; acceptable only while the listener stays
   inside the LAN (risk R-04). Re-evaluate at P7 when real accounts exist.
 
+### Desktop slicer launch
+
+The **Open in slicer** button starts a process on the app host. It is safe only
+because the app is single-user and bound to localhost:
+
+- Only the allow-listed executables (`OrcaSlicer`, `PrusaSlicer`, `Cura`) are
+  started; the client never sends an executable path.
+- The STL path is resolved from the model's server-side SHA-256 in
+  content-addressed storage; the client never sends a filesystem path.
+- No shell is used (`UseShellExecute = false`, argument list only).
+- Paths can be pinned explicitly with `Slicers:OrcaPath`,
+  `Slicers:PrusaPath`, and `Slicers:CuraPath`, or the matching
+  `PRINTSHELF_ORCA_PATH` / `PRINTSHELF_PRUSA_PATH` / `PRINTSHELF_CURA_PATH`
+  environment variables.
+
+If you later expose PrintShelf beyond localhost, put authentication in front of
+this action; arbitrary process launch is a desktop-integration feature, not a
+public web feature.
+
 ## 4. Run as a service (survive logoff/reboot)
 
 Pick one at the P6 gate:

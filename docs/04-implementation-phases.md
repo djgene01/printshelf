@@ -91,10 +91,14 @@ detected; stats visible on detail page.
 - Batch **Previews** page: renders every missing thumbnail from its STL,
   with progress; “Regenerate all” rebuilds existing ones; model page can
   re-capture or save a 1600×1200 PNG.
+- **Open in slicer:** detect installed OrcaSlicer, PrusaSlicer, and Cura;
+  show a picker on the model page; launch the stored STL in the selected app.
+  Explicit paths are configurable via `Slicers:*Path`.
 
 **Acceptance:** preview of a ~100k-triangle STL is interactive [NFR-04];
 no WebGL context leak after visiting 10 models (browser task manager);
-thumb appears in grid after first preview.
+thumb appears in grid after first preview; the installed slicers are listed
+and the selected one receives the model file.
 
 ---
 

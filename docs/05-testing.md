@@ -32,6 +32,9 @@ estimation tolerance (relative error < 1e-6 on the cube).
   type quirks (`citext`, numeric precision).
 - Cover: upload transaction order (file-then-row), soft delete, dedupe
   keep-both vs skip, integrity scan finds seeded orphan + dangling row.
+- Slicer tests: locator resolves explicit executable paths; launch service
+  passes the server-resolved STL to the selected allow-listed app through a
+  fake process starter (no GUI launched in tests).
 
 ## 3. Component tests — bUnit
 
@@ -65,6 +68,8 @@ colour test, which reads the centre pixel to prove the material changed.
 - Preview: orbit/zoom smooth on the 100k fixture [NFR-04]; rotate 10 models
   then check browser memory is flat (dispose leak check).
 - Upload progress bar tracks bytes, not just indeterminate.
+- Slicer card: installed apps are enabled, missing apps are disabled, and the
+  Launch button is disabled without a detected app.
 
 ## 6. Performance spot-checks (P2/P4)
 

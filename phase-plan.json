@@ -167,12 +167,14 @@
         "vendored three.js + STLLoader + OrbitControls in wwwroot/vendor",
         "StlViewer.razor + stl-viewer.js with create/dispose lifecycle, camera fit to bbox",
         "/files/{id} streaming endpoint",
-        "thumbnail capture at first preview (U-02), stored under data/thumbs"
+        "thumbnail capture at first preview (U-02), stored under data/thumbs",
+        "open in slicer: detect OrcaSlicer/PrusaSlicer/Cura and launch the model in the chosen app"
       ],
       "acceptance_checks": [
         "preview of ~100k-triangle STL: orbit/zoom/pan interactive, no console errors (browser check)",
         "after visiting 10 models, browser memory flat (no WebGL context leak)",
         "thumb <img> renders in grid after first preview (U-02=yes) or placeholder shown (=no)",
+        "installed slicer appears enabled, missing slicer disabled, and Launch passes the stored STL to the selected app",
         "Playwright E2E for upload->preview flow is green"
       ],
       "user_validation_gate": {
@@ -302,5 +304,5 @@
   ],
   "gate_protocol": "Run acceptance_checks with evidence, ask the user_validation_gate question, record status; never start a dependent phase while its dependency is not 'approved'. Full protocol: docs/07-risks-and-acceptance.md section 3.",
   "updated": "2026-11-06",
-  "build_status": "MVP implemented and verified (P0-P6); 44 .NET tests + 13 Playwright E2E pass. See docs/08-build-record.md. P7 deferred."
+  "build_status": "MVP implemented and verified (P0-P6); 47 .NET tests + 13 Playwright E2E pass. See docs/08-build-record.md. P7 deferred."
 }

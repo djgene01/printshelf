@@ -4,7 +4,7 @@
 
 > **Build status (2026-11-05):** the global checklist below is mapped to
 > evidence in [Build Record §7](08-build-record.md#7-global-acceptance-checklist-status).
-> Items 1–9 pass; item 10 (reboot survival) and item 11 (external-PC refusal)
+> Items 1–9 and 12 pass; item 10 (reboot survival) and item 11 (external-PC refusal)
 > are partially evidenced — see the build record's known limitations.
 
 ## 1. Risk register
@@ -45,8 +45,11 @@ Evidence style: paste command output / screenshot into the gate record.
 10. App survives logoff/reboot via the chosen service mechanism.
 11. With U-05 = localhost: an external machine **cannot** reach the site
     (proof: connection refused from another PC).
+12. On a machine with a supported slicer installed, the model page lists it
+    and **Launch** passes the model file to the chosen OrcaSlicer,
+    PrusaSlicer, or Cura executable.
 
-**Status after P6 build:** 1–9 ✅, 10 ⚠️ (scripts ready, task not registered),
+**Status after P6 build:** 1–9 and 12 ✅, 10 ⚠️ (scripts ready, task not registered),
 11 ⚠️ (listener proven localhost-only; no second PC available). Full mapping:
 [Build Record §7](08-build-record.md#7-global-acceptance-checklist-status).
 

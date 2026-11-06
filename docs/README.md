@@ -5,7 +5,7 @@ catalogues **STL 3D print files**, backed by **PostgreSQL**, styled with
 **Tailwind CSS**, deployed on a **local Windows machine**.
 
 > **Status: MVP implemented and verified (P0 → P6), updated 2026-11-06.**
-> 44 automated tests (15 STL + 29 web/integration) and 13 Playwright E2E
+> 47 automated tests (15 STL + 32 web/integration) and 13 Playwright E2E
 > tests pass; the published build runs on `http://localhost:5100`.
 > Evidence, measurements and known gaps: [Build Record](08-build-record.md).
 > User accounts (P7) remain deferred; the app is localhost-only until then.

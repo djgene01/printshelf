@@ -1,0 +1,110 @@
+@page "/tags"
+@inject TagService TagSvc
+
+<PageTitle>Tags — PrintShelf</PageTitle>
+
+<PageHeader Title="Tags" Subtitle="Organise"
+            Description="Tags are shared across the catalogue. Deleting a tag removes it from every model." />
+
+@if (_error is not null)
+{
+    <p class="mb-3 rounded border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-200" role="alert">@_error</p>
+}
+
+<form class="card p-3 mb-5 flex flex-col sm:flex-row gap-2" @onsubmit="Add" @onsubmit:preventDefault>
+    <input name="new-tag" class="input flex-1" placeholder="New tag name, e.g. spare-part" maxlength="64" @bind="_newLabel" />
+    <button type="submit" class="btn-primary">Add tag</button>
+</form>
+
+@if (_tags.Count == 0)
+{
+    <EmptyState Title="No tags yet" Text="Create tags to group models by purpose, project or material." />
+}
+else
+{
+    <div class="card divide-y divide-slate-800">
+        @foreach (var tag in _tags)
+        {
+            <div class="flex flex-wrap items-center gap-3 p-3" data-testid="tag-row">
+                @if (_editingId == tag.Id)
+                {
+                    <input class="input flex-1 max-w-xs" maxlength="64" @bind="_editLabel" aria-label="Tag name" />
+                    <button type="button" class="btn-primary text-xs" @onclick="SaveRename">Save</button>
+                    <button type="button" class="btn-ghost text-xs" @onclick="CancelRename">Cancel</button>
+                }
+                else
+                {
+                    <span class="flex-1 min-w-0">
+                        <span class="text-sm font-medium text-slate-100">@tag.Label</span>
+                        <span class="ml-2 text-[11px] text-slate-500">@($"{tag.ModelCount} model{(tag.ModelCount == 1 ? "" : "s")}")</span>
+                        <span class="ml-2 text-[10px] text-slate-600">/{tag.Slug}</span>
+                    </span>
+                    <a href="@($"/catalogue?tag={tag.Id}")" class="btn-ghost text-xs">View</a>
+                    <button type="button" class="btn-ghost text-xs" @onclick="() => StartRename(tag)">Rename</button>
+                    <ConfirmButton Text="Delete" ConfirmText="Delete tag?" CssClass="btn-ghost text-xs text-rose-300"
+                                   OnConfirm="() => Delete(tag)" />
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<TagUsage> _tags = [];
+    private string _newLabel = "";
+    private Guid? _editingId;
+    private string _editLabel = "";
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _tags = await TagSvc.ListAsync();
+
+    private async Task Add()
+    {
+        _error = null;
+        var result = await TagSvc.CreateAsync(_newLabel);
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+        _newLabel = "";
+        await ReloadAsync();
+    }
+
+    private void StartRename(TagUsage tag)
+    {
+        _editingId = tag.Id;
+        _editLabel = tag.Label;
+        _error = null;
+    }
+
+    private void CancelRename()
+    {
+        _editingId = null;
+        _editLabel = "";
+    }
+
+    private async Task SaveRename()
+    {
+        if (_editingId is not { } id)
+            return;
+        _error = null;
+        var result = await TagSvc.RenameAsync(id, _editLabel);
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+        CancelRename();
+        await ReloadAsync();
+    }
+
+    private async Task Delete(TagUsage tag)
+    {
+        _error = null;
+        await TagSvc.DeleteAsync(tag.Id);
+        await ReloadAsync();
+    }
+}

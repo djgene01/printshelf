@@ -1,0 +1,174 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="card overflow-hidden">
+    <div class="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2">
+        <h2 class="text-[11px] uppercase tracking-wider text-slate-500">3D preview</h2>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            @if (_thumbnailSaved)
+            {
+                <span class="text-[11px] text-emerald-400">Thumbnail saved</span>
+            }
+            <button type="button" class="btn-ghost text-xs" disabled="@(!_ready)" @onclick="DownloadPng">Save PNG</button>
+            <button type="button" class="btn-ghost text-xs" disabled="@(!_ready || _updating)" @onclick="UpdateThumbnail">
+                @(_updating ? "Saving…" : "Update thumbnail")
+            </button>
+            <button type="button" class="btn-ghost text-xs" disabled="@(!_ready)" @onclick="Reset">Reset view</button>
+        </div>
+    </div>
+
+    <div class="relative bg-slate-950" style="@($"height:{Height}px")">
+        <div id="@_elementId" class="h-full w-full"></div>
+
+        @if (_loading)
+        {
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/80 text-xs text-slate-400" aria-live="polite">
+                <div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-emerald-400"></div>
+                Loading mesh…
+            </div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/95 p-6 text-center">
+                <p class="text-sm text-rose-300">Preview unavailable</p>
+                <p class="text-xs text-slate-500 max-w-sm">@_error</p>
+                <a class="btn-secondary text-xs mt-2" href="@FileUrl" download>Download STL instead</a>
+            </div>
+        }
+    </div>
+
+    <p class="border-t border-slate-800 px-3 py-2 text-[11px] text-slate-500">
+        Drag to orbit · scroll to zoom · right-drag or two fingers to pan.
+    </p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid ModelId { get; set; }
+    [Parameter] public bool HasThumb { get; set; }
+    [Parameter] public int Height { get; set; } = 420;
+    [Parameter] public string DownloadName { get; set; } = "printshelf-preview.png";
+    [Parameter] public string MaterialColor { get; set; } = "#e7edf5";
+    [Parameter] public EventCallback OnThumbnailCaptured { get; set; }
+
+    private readonly string _elementId = "viewer-" + Guid.NewGuid().ToString("N");
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<StlViewer>? _dotNetRef;
+    private bool _ready;
+    private bool _loading = true;
+    private bool _thumbnailSaved;
+    private bool _updating;
+    private string? _error;
+
+    private string FileUrl => $"/files/{ModelId}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/stl-viewer.js");
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await _module.InvokeAsync<bool>("createViewer", _elementId, FileUrl, ModelId, HasThumb, _dotNetRef, MaterialColor);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        {
+            _error = "The 3D viewer could not start: " + ex.Message;
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public Task OnViewerReady()
+    {
+        _ready = true;
+        _loading = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnThumbnailSaved()
+    {
+        _thumbnailSaved = true;
+        StateHasChanged();
+        return OnThumbnailCaptured.InvokeAsync();
+    }
+
+    [JSInvokable]
+    public Task OnViewerError(string message)
+    {
+        _error = message;
+        _loading = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task Reset()
+    {
+        if (_module is null)
+            return;
+        try { await _module.InvokeVoidAsync("resetViewer", _elementId); }
+        catch (JSException) { }
+    }
+
+    private async Task DownloadPng()
+    {
+        if (_module is null)
+            return;
+        try
+        {
+            await _module.InvokeAsync<bool>("savePng", _elementId, DownloadName);
+        }
+        catch (JSException ex)
+        {
+            _error = "Could not export the preview: " + ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateThumbnail()
+    {
+        if (_module is null)
+            return;
+        _updating = true;
+        try
+        {
+            bool saved = await _module.InvokeAsync<bool>("recaptureThumbnail", _elementId);
+            if (!saved)
+            {
+                _error = "Could not save a new thumbnail for this model.";
+                StateHasChanged();
+            }
+        }
+        catch (JSException ex)
+        {
+            _error = "Could not update the thumbnail: " + ex.Message;
+            StateHasChanged();
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("disposeViewer", _elementId);
+                await _module.DisposeAsync();
+            }
+            catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
+            {
+                // Circuit is going away; the viewer's DOM is already gone.
+            }
+        }
+        _dotNetRef?.Dispose();
+    }
+}

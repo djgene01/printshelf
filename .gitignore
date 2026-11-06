@@ -1,0 +1,24 @@
+bin/
+obj/
+data/
+uploads/
+*.user
+*.suo
+*.log
+publish/
+backups/
+.tmp/
+.vs/
+.idea/
+Thumbs.db
+.DS_Store
+src/tests/e2e/node_modules/
+src/tests/e2e/test-results/
+src/tests/e2e/playwright-report/
+
+# Platform-specific standalone Tailwind CLI (107 MB; download when rebuilding CSS)
+tools/tailwindcss.exe
+
+# Local/production secrets
+appsettings.Production.json
+appsettings.*.local.json

@@ -1,0 +1,345 @@
+@page "/upload"
+@implements IAsyncDisposable
+@inject IngestService Ingest
+@inject CategoryService Categories
+@inject UploadOptions UploadOptions
+@inject IJSRuntime JS
+
+<PageTitle>Upload — PrintShelf</PageTitle>
+
+<PageHeader Title="Upload STL files" Subtitle="Ingest"
+            Description="Drop binary or ASCII STL files. Each file is parsed, hashed and stored by content." />
+
+<div class="card mb-4 p-4">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+        <div class="min-w-0 flex-1">
+            <label class="label" for="upload-category">Place these files in a category</label>
+            <select id="upload-category" class="input max-w-sm" @bind="_category">
+                <option value="">Uncategorised</option>
+                @foreach (var category in _categories)
+                {
+                    <option value="@category.Name">@category.Name</option>
+                }
+            </select>
+        </div>
+        <a class="link text-xs" href="/categories">Manage categories →</a>
+    </div>
+    <p class="mt-2 text-[11px] text-slate-500">
+        Applied to every file in this session. The category's material colour is used in the 3D preview.
+    </p>
+</div>
+
+@if (_pending is not null)
+{
+    <div class="card border-amber-600/60 bg-amber-950/20 p-4 mb-4" role="alert">
+        <h2 class="text-sm font-semibold text-amber-200">Already in the library</h2>
+        <p class="text-sm text-amber-100/80 mt-1">
+            <span class="font-medium">@_pending.FileName</span> has the same SHA-256 as:
+        </p>
+        <ul class="mt-2 space-y-1 text-sm text-amber-100">
+            @foreach (var duplicate in _pending.Duplicates)
+            {
+                <li class="flex items-center gap-2">
+                    <span class="text-amber-400" aria-hidden="true">•</span>
+                    <a class="link" href="@($"/models/{duplicate.Id}")">@duplicate.Name</a>
+                </li>
+            }
+        </ul>
+        <p class="text-xs text-amber-200/60 mt-2">Keep both creates a second catalogue entry that shares the same file on disk.</p>
+        <div class="flex flex-wrap gap-2 mt-3">
+            <button type="button" class="btn-primary" disabled="@_busy" @onclick="KeepBoth">Keep both</button>
+            <button type="button" class="btn-secondary" disabled="@_busy" @onclick="SkipDuplicate">Skip this file</button>
+        </div>
+    </div>
+}
+
+@if (_busy && _currentName is not null)
+{
+    <div class="card p-4 mb-4" aria-live="polite">
+        <div class="flex items-center justify-between gap-3 text-xs text-slate-400">
+            <span class="truncate">Reading <span class="text-slate-200">@_currentName</span></span>
+            <span class="tabular-nums shrink-0">
+                @DisplayFormat.Bytes(_currentBytes)@(CurrentPercent is null ? "" : $" / {CurrentPercent}%")
+            </span>
+        </div>
+        <div class="mt-2 h-2 overflow-hidden rounded bg-slate-800">
+            @if (CurrentPercent is null)
+            {
+                <div class="h-full w-1/3 animate-pulse bg-emerald-500"></div>
+            }
+            else
+            {
+                <div class="h-full bg-emerald-500 transition-[width] duration-150" style="@($"width:{CurrentPercent}%")"></div>
+            }
+        </div>
+        <p class="mt-2 text-[11px] text-slate-500">Parsing and SHA-256 hashing happen on the server after transfer.</p>
+    </div>
+}
+
+<label id="drop-zone" for="upload-input" class="dropzone">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-10 h-10 text-emerald-400" aria-hidden="true">
+        <path d="M12 16V4m0 0 4 4m-4-4L8 8" />
+        <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </svg>
+    <span class="text-sm font-medium text-slate-100">Drop STL files here, or click to choose</span>
+    <span class="text-xs text-slate-500">Binary + ASCII STL · up to @UploadOptions.MaxBytesDisplay per file · multiple files supported</span>
+    <InputFile id="upload-input" class="sr-only" multiple
+               accept=".stl,model/stl,application/sla"
+               OnChange="OnFilesSelected" />
+</label>
+
+<div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+    <p>Tip: large files stream through the Blazor circuit — the progress bar counts real bytes.</p>
+</div>
+
+@if (_rows.Count > 0)
+{
+    <section class="mt-8" aria-labelledby="results-heading">
+        <div class="flex items-center justify-between gap-2 mb-3">
+            <h2 id="results-heading" class="text-sm font-semibold uppercase tracking-wider text-slate-400">This session</h2>
+            <button type="button" class="btn-ghost text-xs" @onclick="ClearResults">Clear results</button>
+        </div>
+        <ul class="card divide-y divide-slate-800" aria-live="polite">
+            @foreach (var row in _rows)
+            {
+                <li class="flex flex-wrap items-center gap-3 p-3">
+                    <span class="@StatusClass(row.Status) w-7 h-7 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
+                          aria-hidden="true">@StatusGlyph(row.Status)</span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-baseline gap-2">
+                            <span class="text-sm font-medium text-slate-100 truncate">@row.FileName</span>
+                            @if (row.ModelId is { } id)
+                            {
+                                <a class="link text-xs" href="@($"/models/{id}")">Open @row.ModelName →</a>
+                            }
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">@row.Message</p>
+                    </div>
+                    <span class="text-[11px] text-slate-500 tabular-nums shrink-0">@DisplayFormat.Bytes(row.Bytes)</span>
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    private sealed class UploadRow
+    {
+        public required string FileName { get; init; }
+        public required UploadStatus Status { get; init; }
+        public required string Message { get; init; }
+        public long Bytes { get; init; }
+        public Guid? ModelId { get; init; }
+        public string? ModelName { get; init; }
+    }
+
+    private readonly List<UploadRow> _rows = [];
+    private readonly Queue<IBrowserFile> _queue = new();
+    private UploadResult? _pending;
+    private UploadRow? _duplicateRow;
+    private bool _busy;
+    private string? _currentName;
+    private long _currentBytes;
+    private long _currentTotal;
+    private IJSObjectReference? _module;
+    private IReadOnlyList<CategoryInfo> _categories = [];
+    private string _category = "";
+
+    private int? CurrentPercent =>
+        _currentTotal <= 0 ? null : (int)Math.Clamp(_currentBytes * 100 / _currentTotal, 0, 100);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await Categories.ListAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/file-drop.js");
+            await _module.InvokeVoidAsync("wireDropZone", "drop-zone", "upload-input");
+        }
+        catch (JSException)
+        {
+            // The picker still works if the drag-drop bridge cannot load.
+        }
+    }
+
+    private async Task OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles(100);
+        foreach (var file in files)
+        {
+            string? invalid = UploadValidation.Validate(file.Name, file.Size, UploadOptions.MaxBytes);
+            if (invalid is not null)
+            {
+                _rows.Insert(0, new UploadRow
+                {
+                    FileName = file.Name,
+                    Status = UploadStatus.Rejected,
+                    Message = invalid,
+                    Bytes = file.Size
+                });
+                continue;
+            }
+            _queue.Enqueue(file);
+        }
+
+        await ProcessQueueAsync();
+    }
+
+    private async Task ProcessQueueAsync()
+    {
+        if (_busy)
+            return;
+
+        _busy = true;
+        try
+        {
+            while (_queue.Count > 0 && _pending is null)
+            {
+                var file = _queue.Dequeue();
+                _currentName = file.Name;
+                _currentTotal = file.Size;
+                _currentBytes = 0;
+                StateHasChanged();
+
+                var progress = new Progress<long>(bytes =>
+                {
+                    _currentBytes = bytes;
+                    _ = InvokeAsync(StateHasChanged);
+                });
+
+                UploadResult result;
+                try
+                {
+                    await using var stream = file.OpenReadStream(UploadOptions.MaxBytes);
+                    result = await Ingest.IngestAsync(stream, file.Name, file.Size, progress,
+                        category: string.IsNullOrWhiteSpace(_category) ? null : _category);
+                }
+                catch (Exception ex)
+                {
+                    result = new UploadResult
+                    {
+                        Status = UploadStatus.Failed,
+                        FileName = file.Name,
+                        Message = "Could not read the file: " + ex.Message,
+                        Bytes = file.Size
+                    };
+                }
+
+                var row = new UploadRow
+                {
+                    FileName = file.Name,
+                    Status = result.Status,
+                    Message = result.Message,
+                    Bytes = result.Bytes,
+                    ModelId = result.Model?.Id,
+                    ModelName = result.Model?.Name
+                };
+                _rows.Insert(0, row);
+
+                if (result.Status == UploadStatus.Duplicate)
+                {
+                    _pending = result;
+                    _duplicateRow = row;
+                }
+
+                _currentName = null;
+                _currentBytes = 0;
+                _currentTotal = 0;
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            _busy = false;
+            _currentName = null;
+            if (_queue.Count == 0)
+                await ClearPickerAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task KeepBoth() => await ResolveDuplicate(true);
+
+    private async Task SkipDuplicate() => await ResolveDuplicate(false);
+
+    private async Task ResolveDuplicate(bool keepBoth)
+    {
+        if (_pending is null || _busy)
+            return;
+
+        _busy = true;
+        try
+        {
+            var result = await Ingest.ResolveDuplicateAsync(_pending.DuplicateToken, keepBoth);
+            if (_duplicateRow is not null)
+            {
+                _rows.Remove(_duplicateRow);
+            }
+
+            _rows.Insert(0, new UploadRow
+            {
+                FileName = _pending.FileName,
+                Status = result.Status,
+                Message = result.Message,
+                Bytes = result.Bytes,
+                ModelId = result.Model?.Id,
+                ModelName = result.Model?.Name
+            });
+
+            _pending = null;
+            _duplicateRow = null;
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+
+        await ProcessQueueAsync();
+    }
+
+    private async Task ClearPickerAsync()
+    {
+        if (_module is null)
+            return;
+        try { await _module.InvokeVoidAsync("clearInput", "upload-input"); }
+        catch (JSException) { }
+    }
+
+    private void ClearResults()
+    {
+        _rows.Clear();
+    }
+
+    private static string StatusClass(UploadStatus status) => status switch
+    {
+        UploadStatus.Added => "bg-emerald-500/20 text-emerald-300",
+        UploadStatus.Duplicate => "bg-amber-500/20 text-amber-300",
+        UploadStatus.Skipped => "bg-slate-500/20 text-slate-300",
+        UploadStatus.Rejected => "bg-rose-500/20 text-rose-300",
+        _ => "bg-rose-500/20 text-rose-300"
+    };
+
+    private static string StatusGlyph(UploadStatus status) => status switch
+    {
+        UploadStatus.Added => "✓",
+        UploadStatus.Duplicate => "!",
+        UploadStatus.Skipped => "–",
+        _ => "✕"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try { await _module.DisposeAsync(); }
+            catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException) { }
+        }
+    }
+}

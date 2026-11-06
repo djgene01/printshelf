@@ -1,0 +1,163 @@
+@page "/categories"
+@inject CategoryService CategoryStore
+
+<PageTitle>Categories — PrintShelf</PageTitle>
+
+<PageHeader Title="Categories" Subtitle="Organise"
+            Description="Create categories, give each one a material colour, and place models into them from Upload or Edit.">
+    <a href="/catalogue" class="btn-secondary">Browse catalogue</a>
+</PageHeader>
+
+@if (_message is not null)
+{
+    <p class="mb-4 rounded border px-3 py-2 text-sm @(_error ? "border-rose-800 bg-rose-950/40 text-rose-200" : "border-emerald-800 bg-emerald-950/40 text-emerald-200")"
+       role="@(_error ? "alert" : "status")">@_message</p>
+}
+
+<div class="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+    <form class="card h-fit p-4" @onsubmit="Create" @onsubmit:preventDefault>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">New category</h2>
+
+        <div class="mt-4">
+            <label class="label" for="new-category-name">Name</label>
+            <input id="new-category-name" class="input" maxlength="80" required
+                   placeholder="e.g. Lamp shades" @bind="_newName" />
+        </div>
+
+        <div class="mt-4">
+            <label class="label" for="new-category-color">Material colour</label>
+            <div class="flex items-center gap-3">
+                <input id="new-category-color" type="color" class="h-10 w-14 cursor-pointer rounded border border-slate-700 bg-slate-950 p-1"
+                       @bind="_newColor" />
+                <code class="text-xs text-slate-400">@_newColor</code>
+            </div>
+            <p class="mt-1 text-[11px] text-slate-500">Used as the model colour in previews and thumbnails.</p>
+        </div>
+
+        <button type="submit" class="btn-primary mt-5 w-full" disabled="@_busy">Create category</button>
+    </form>
+
+    <section class="card overflow-hidden" aria-labelledby="category-list-heading">
+        <div class="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+            <h2 id="category-list-heading" class="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Categories <span class="text-slate-500">(@_items.Count)</span>
+            </h2>
+            <span class="text-[11px] text-slate-500">Changes save automatically</span>
+        </div>
+
+        @if (_items.Count == 0)
+        {
+            <div class="p-6">
+                <EmptyState Title="No categories yet" Text="Create one on the left, then assign models from Upload or Edit details." />
+            </div>
+        }
+        else
+        {
+            <ul class="divide-y divide-slate-800">
+                @foreach (var category in _items)
+                {
+                    <li class="flex flex-wrap items-center gap-3 px-4 py-3" @key="category.Id">
+                        <input type="color" value="@category.Color" aria-label="@($"Colour for {category.Name}")"
+                               class="h-9 w-12 shrink-0 cursor-pointer rounded border border-slate-700 bg-slate-950 p-1"
+                               @onchange="e => UpdateColor(category, e)" />
+
+                        <input class="input min-w-0 flex-1" style="max-width: 20rem" value="@category.Name"
+                               aria-label="@($"Name for {category.Name}")" maxlength="80"
+                               @onchange="e => Rename(category, e)" />
+
+                        <a class="badge" href="@($"/catalogue?category={Uri.EscapeDataString(category.Name)}")">
+                            @category.ModelCount model@(category.ModelCount == 1 ? "" : "s")
+                        </a>
+
+                        <span class="ml-auto flex items-center gap-2">
+                            <ConfirmButton Text="Delete" CssClass="btn-ghost text-xs"
+                                           ConfirmText="Delete this category? Models stay in the library and become uncategorised."
+                                           OnConfirm="() => Delete(category)" />
+                        </span>
+                    </li>
+                }
+            </ul>
+            <p class="border-t border-slate-800 px-4 py-3 text-[11px] text-slate-500">
+                A changed colour applies to the live preview immediately. Existing thumbnails refresh when you
+                use <span class="text-slate-300">Update thumbnail</span> on a model, or
+                <a class="link" href="/admin/previews">Regenerate all</a> on Previews.
+            </p>
+        }
+    </section>
+</div>
+
+@code {
+    private IReadOnlyList<CategoryInfo> _items = [];
+    private string _newName = "";
+    private string _newColor = "#67e8f9";
+    private string? _message;
+    private bool _error;
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _items = await CategoryStore.ListAsync();
+    }
+
+    private async Task Create()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            var result = await CategoryStore.CreateAsync(_newName, _newColor);
+            Handle(result, "Category created.");
+            if (result.Status == CategorySaveStatus.Saved)
+            {
+                _newName = "";
+                await ReloadAsync();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Rename(CategoryInfo category, ChangeEventArgs e)
+    {
+        string name = e.Value?.ToString() ?? "";
+        if (string.Equals(name.Trim(), category.Name, StringComparison.Ordinal))
+            return;
+
+        var result = await CategoryStore.UpdateAsync(category.Id, name, category.Color);
+        Handle(result, $"Renamed to “{name.Trim()}”.");
+        await ReloadAsync();
+    }
+
+    private async Task UpdateColor(CategoryInfo category, ChangeEventArgs e)
+    {
+        string color = e.Value?.ToString() ?? CategoryService.DefaultColor;
+        var result = await CategoryStore.UpdateAsync(category.Id, category.Name, color);
+        Handle(result, $"{category.Name} is now {color}.");
+        await ReloadAsync();
+    }
+
+    private async Task Delete(CategoryInfo category)
+    {
+        if (await CategoryStore.DeleteAsync(category.Id))
+        {
+            _message = $"Deleted “{category.Name}”. Its models are now uncategorised.";
+            _error = false;
+        }
+        await ReloadAsync();
+    }
+    private void Handle(CategorySaveResult result, string success)
+    {
+        (_message, _error) = result.Status switch
+        {
+            CategorySaveStatus.Saved => (success, false),
+            CategorySaveStatus.DuplicateName => ("A category with that name already exists.", true),
+            CategorySaveStatus.InvalidName => ("Enter a category name between 1 and 80 characters.", true),
+            CategorySaveStatus.InvalidColor => ("Pick a valid colour (six-digit hex).", true),
+            _ => ("That category no longer exists.", true)
+        };
+    }
+}

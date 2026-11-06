@@ -1,0 +1,306 @@
+{
+  "project": "PrintShelf — 3D Print File Manager & Catalogue",
+  "generated": "2026-11-05",
+  "status_values": [
+    "pending",
+    "in_progress",
+    "awaiting_validation",
+    "approved",
+    "changes_requested",
+    "blocked"
+  ],
+  "decisions": {
+    "framework": ".NET 10 (SDK 10.0.401 installed), Blazor Server",
+    "database": "PostgreSQL + EF Core 10 + Npgsql.EntityFrameworkCore.PostgreSQL 10.0",
+    "formats": "STL only (binary + ASCII)",
+    "ui": "Tailwind CSS v4 (standalone CLI default)",
+    "deployment": "Local Windows machine, Kestrel/dotnet run, single instance",
+    "auth": "None in MVP; full user accounts deferred to P7 (user decision)"
+  },
+  "unresolved": [
+    {
+      "id": "U-01",
+      "question": "STL parsing: internal library vs MeshIO NuGet",
+      "default": "internal PrintShelf.Stl",
+      "gate": "P2",
+      "status": "resolved",
+      "resolution": "Internal PrintShelf.Stl parser (binary + ASCII), 15 golden tests.",
+      "resolved": "2026-11-05"
+    },
+    {
+      "id": "U-02",
+      "question": "Client-side thumbnail capture at first preview?",
+      "default": "yes, capture PNG",
+      "gate": "P3",
+      "status": "resolved",
+      "resolution": "Yes - capture PNG on first preview, stored in data/thumbs.",
+      "resolved": "2026-11-05"
+    },
+    {
+      "id": "U-03",
+      "question": "Tailwind toolchain: standalone CLI vs npm",
+      "default": "standalone CLI",
+      "gate": "P0",
+      "status": "resolved",
+      "resolution": "Tailwind v4 standalone CLI (v4.3.4), no npm needed to build CSS.",
+      "resolved": "2026-11-05"
+    },
+    {
+      "id": "U-04",
+      "question": "Final max upload size",
+      "default": "200 MB",
+      "gate": "P1",
+      "status": "resolved",
+      "resolution": "200 MB, enforced by Kestrel + form + SignalR MaximumReceiveMessageSize.",
+      "resolved": "2026-11-05"
+    },
+    {
+      "id": "U-05",
+      "question": "LAN access for other people or localhost only",
+      "default": "localhost only",
+      "gate": "P6",
+      "status": "resolved",
+      "resolution": "Localhost only; no LAN binding until P7 accounts exist.",
+      "resolved": "2026-11-05"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P0",
+      "title": "Scaffold: Blazor Server + Tailwind + PostgreSQL + storage layout",
+      "depends_on": [],
+      "status": "approved",
+      "deliverables": [
+        "PrintShelf.Web (net10.0, Interactive Server) + PrintShelf.Stl + test projects",
+        "Tailwind v4 standalone CLI build wired to wwwroot/css/app.css",
+        "AppDbContext + first migration (models, tags, model_tags) applied to local PostgreSQL",
+        "data/library + data/thumbs created on startup; appsettings keys; health page; Tailwind layout shell"
+      ],
+      "acceptance_checks": [
+        "dotnet build exits 0 with no warnings-as-errors surprises",
+        "app serves http://localhost:5100 and /health returns 200",
+        "a Tailwind utility class visibly styles the shell page (screenshot)",
+        "dotnet ef database update applies migration to PostgreSQL (psql shows tables)",
+        "dotnet test runs green (empty suite acceptable)"
+      ],
+      "user_validation_gate": {
+        "question": "Scaffold accepted — proceed to P1 catalogue/upload? (also confirm project name and U-03 Tailwind toolchain)",
+        "choices": [
+          "Approved, continue",
+          "Change project name first",
+          "Change Tailwind toolchain",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "Build 0 warnings/0 errors; /health 200; Tailwind applied; migration applied; tests green.",
+      "evidence": "docs/08-build-record.md#1-what-was-built"
+    },
+    {
+      "id": "P1",
+      "title": "Catalogue CRUD + upload plumbing + tags",
+      "depends_on": [
+        "P0"
+      ],
+      "status": "approved",
+      "deliverables": [
+        "upload page (drag-drop + picker, multi-file, progress), temp staging, magic sniff",
+        "Kestrel/SignalR/multipart size limits configured and tested with ~50 MB file",
+        "model list/detail/edit/soft-delete pages; tags CRUD; category"
+      ],
+      "acceptance_checks": [
+        "round-trip: upload real STL -> appears in list -> edit name/tag -> delete hides it",
+        "non-STL upload rejected with clear message",
+        "upload above configured limit rejected (state the limit, U-04)",
+        "screenshots at 1280px and 390px widths"
+      ],
+      "user_validation_gate": {
+        "question": "Catalogue + upload flow accepted — proceed to P2 STL ingest/stats?",
+        "choices": [
+          "Approved, continue",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "Full upload/list/edit/tag/soft-delete flow; non-STL + oversize rejection; 200 MB limits all three layers; 50 MB-class upload verified.",
+      "evidence": "docs/08-build-record.md#2-verification-commands-and-results"
+    },
+    {
+      "id": "P2",
+      "title": "STL ingest: strict parsing, geometry stats, dedupe, integrity scan",
+      "depends_on": [
+        "P1"
+      ],
+      "status": "approved",
+      "deliverables": [
+        "PrintShelf.Stl binary+ASCII parser with validation (U-01 decision recorded)",
+        "xUnit golden fixtures incl. corrupt/truncated/NaN cases",
+        "SHA-256 dedupe UX (keep-both/skip); content-addressed storage; file-first/row-second order",
+        "admin integrity scan page (orphans/dangling rows)"
+      ],
+      "acceptance_checks": [
+        "dotnet test green for PrintShelf.Stl (cube bbox 10x10x10, volume 1000mm3 exact-match tolerance)",
+        "corrupt/truncated/oversize uploads each rejected with specific reason",
+        "duplicate upload triggers dedupe prompt",
+        "stats on detail page match a reference slicer's reported triangle count"
+      ],
+      "user_validation_gate": {
+        "question": "Ingest + stats accepted (U-01 parser choice locked) — proceed to P3 preview?",
+        "choices": [
+          "Approved, continue",
+          "Swap to MeshIO and rebuild",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "Strict parser + 15 golden tests; SHA-256 dedupe keep-both/skip; integrity scan finds orphans and dangling rows (integration tests).",
+      "evidence": "docs/08-build-record.md#2-verification-commands-and-results"
+    },
+    {
+      "id": "P3",
+      "title": "3D preview (three.js) + thumbnails",
+      "depends_on": [
+        "P2"
+      ],
+      "status": "approved",
+      "deliverables": [
+        "vendored three.js + STLLoader + OrbitControls in wwwroot/vendor",
+        "StlViewer.razor + stl-viewer.js with create/dispose lifecycle, camera fit to bbox",
+        "/files/{id} streaming endpoint",
+        "thumbnail capture at first preview (U-02), stored under data/thumbs"
+      ],
+      "acceptance_checks": [
+        "preview of ~100k-triangle STL: orbit/zoom/pan interactive, no console errors (browser check)",
+        "after visiting 10 models, browser memory flat (no WebGL context leak)",
+        "thumb <img> renders in grid after first preview (U-02=yes) or placeholder shown (=no)",
+        "Playwright E2E for upload->preview flow is green"
+      ],
+      "user_validation_gate": {
+        "question": "Preview + thumbnails accepted — proceed to P4 search/views?",
+        "choices": [
+          "Approved, continue",
+          "Adjust viewer defaults (lighting/colors)",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "three.js 0.187.0 vendored locally; /files/{id}; camera fit; thumbnail captured on first preview and rendered in grid; 100k preview 498 ms, heap flat after 10 visits.",
+      "evidence": "docs/08-build-record.md#3-performance-evidence"
+    },
+    {
+      "id": "P4",
+      "title": "Search, filter, sort, grid/list views",
+      "depends_on": [
+        "P3"
+      ],
+      "status": "approved",
+      "deliverables": [
+        "ILIKE search over name/description/tags; tag/category facets; sorts",
+        "grid view with thumbnails (default) + list toggle; empty states"
+      ],
+      "acceptance_checks": [
+        "search+filter+sort behave per FR-08 on seeded 1000-row dataset",
+        "query latency < 300ms on seeded dataset (measured)",
+        "bUnit tests for filter component green"
+      ],
+      "user_validation_gate": {
+        "question": "Browse/search accepted — proceed to P5 print-run log?",
+        "choices": [
+          "Approved, continue",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "ILIKE search + facets + 4 sorts + grid/list; 1000-row seed; page responses 19-26 ms; bUnit toolbar tests green.",
+      "evidence": "docs/08-build-record.md#3-performance-evidence"
+    },
+    {
+      "id": "P5",
+      "title": "Print-run log + per-model stats",
+      "depends_on": [
+        "P3"
+      ],
+      "status": "approved",
+      "deliverables": [
+        "print_runs table + CRUD UI on model page",
+        "aggregates: times printed, success rate, total time, est cost; dashboard 'most printed'"
+      ],
+      "acceptance_checks": [
+        "add/edit/delete print run round-trips",
+        "aggregate card matches hand-computed fixture values",
+        "result enum enforced at DB level"
+      ],
+      "user_validation_gate": {
+        "question": "Print-run log accepted — proceed to P6 export/backup/deploy polish?",
+        "choices": [
+          "Approved, continue",
+          "Adjust fields (printer/material list)",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "print_runs CRUD + DB result check constraint; aggregates match hand-computed fixture; dashboard most-printed.",
+      "evidence": "docs/08-build-record.md#2-verification-commands-and-results"
+    },
+    {
+      "id": "P6",
+      "title": "Export, purge, backups, run-as-service (MVP close-out)",
+      "depends_on": [
+        "P4",
+        "P5"
+      ],
+      "status": "approved",
+      "deliverables": [
+        "CSV export (catalogue + print runs, UTF-8 BOM)",
+        "hard-delete purge page",
+        "pg_dump scheduled backup + restore notes; service choice (Task Scheduler or NSSM) configured",
+        "U-05 LAN decision applied (localhost-only default, firewall rule if LAN)"
+      ],
+      "acceptance_checks": [
+        "CSV opens in Excel with correct encoding and row count",
+        "restore drill: scratch DB + copied data/ -> catalogue + previews work",
+        "app answers /health after logoff/reboot",
+        "if localhost-only: connection from another PC is refused (proof shown)"
+      ],
+      "user_validation_gate": {
+        "question": "MVP accepted as complete against the global checklist in docs/07 — schedule deferred P7 accounts?",
+        "choices": [
+          "MVP accepted; schedule P7 later",
+          "MVP accepted; start P7 now",
+          "Changes requested"
+        ]
+      },
+      "completed": "2026-11-05",
+      "notes": "CSV UTF-8 BOM models + print runs; purge; backup/restore drill passed (1008 rows, 1007 files, published instance on :5101). Deploy scripts ready; Task Scheduler not registered and reboot not tested.",
+      "evidence": "docs/08-build-record.md#5-postgresql-storage-backup-and-restore"
+    },
+    {
+      "id": "P7",
+      "title": "DEFERRED: user accounts (ASP.NET Core Identity)",
+      "depends_on": [
+        "P6"
+      ],
+      "status": "pending",
+      "deferred": true,
+      "deliverables": [
+        "Identity on same PostgreSQL; login page; owner_id columns + query filters",
+        "assign existing data to first account"
+      ],
+      "acceptance_checks": [
+        "anonymous visitors see only login",
+        "each user sees only their models (integration test)"
+      ],
+      "user_validation_gate": {
+        "question": "Accounts accepted?",
+        "choices": [
+          "Approved",
+          "Changes requested"
+        ]
+      },
+      "notes": "Deferred by decision D5; start only after P6 user gate."
+    }
+  ],
+  "gate_protocol": "Run acceptance_checks with evidence, ask the user_validation_gate question, record status; never start a dependent phase while its dependency is not 'approved'. Full protocol: docs/07-risks-and-acceptance.md section 3.",
+  "updated": "2026-11-06",
+  "build_status": "MVP implemented and verified (P0-P6); 44 .NET tests + 13 Playwright E2E pass. See docs/08-build-record.md. P7 deferred."
+}

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PrintShelf.Stl/PrintShelf.Stl.csproj" />
+    <Project Path="src/PrintShelf.Web/PrintShelf.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/tests/">
+    <Project Path="src/tests/PrintShelf.Stl.Tests/PrintShelf.Stl.Tests.csproj" />
+    <Project Path="src/tests/PrintShelf.Web.Tests/PrintShelf.Web.Tests.csproj" />
+  </Folder>
+</Solution>

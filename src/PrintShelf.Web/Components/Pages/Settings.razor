@@ -1,0 +1,109 @@
+@page "/settings"
+@using Npgsql
+@inject IConfiguration Config
+@inject StorageService Storage
+@inject UploadOptions Upload
+@inject IWebHostEnvironment Env
+
+<PageTitle>Settings — PrintShelf</PageTitle>
+
+<PageHeader Title="Settings" Subtitle="System"
+            Description="Configuration and maintenance for this installation. Values come from appsettings.json / environment." />
+
+<div class="grid md:grid-cols-2 gap-4">
+    <section class="card p-4" aria-labelledby="storage-heading">
+        <h2 id="storage-heading" class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Storage</h2>
+        <dl class="space-y-2 text-xs">
+            <div><dt class="text-slate-500">Library</dt><dd class="font-mono break-all text-slate-300">@Storage.LibraryDir</dd></div>
+            <div><dt class="text-slate-500">Thumbnails</dt><dd class="font-mono break-all text-slate-300">@Storage.ThumbDir</dd></div>
+            <div><dt class="text-slate-500">Temp staging</dt><dd class="font-mono break-all text-slate-300">@Storage.TempDir</dd></div>
+            <div><dt class="text-slate-500">Library files</dt><dd class="tabular-nums text-slate-300">@Storage.ListLibraryFiles().Count file(s), @DisplayFormat.Bytes(Storage.ListLibraryFiles().Sum(f => f.Length))</dd></div>
+            <div><dt class="text-slate-500">Thumbnails on disk</dt><dd class="tabular-nums text-slate-300">@Storage.ListThumbFiles().Count</dd></div>
+        </dl>
+        <div class="mt-3 flex gap-2">
+            <a href="/admin/integrity" class="btn-secondary text-xs">Integrity scan</a>
+            <a href="/admin/purge" class="btn-secondary text-xs">Purge</a>
+        </div>
+    </section>
+
+    <section class="card p-4" aria-labelledby="upload-heading">
+        <h2 id="upload-heading" class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Upload limits</h2>
+        <dl class="space-y-2 text-xs">
+            <div class="flex justify-between"><dt class="text-slate-500">Max file size</dt><dd class="tabular-nums text-slate-300">@Upload.MaxBytesDisplay</dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500">Formats</dt><dd class="text-slate-300">STL binary + ASCII</dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500">Kestrel body limit</dt><dd class="tabular-nums text-slate-300">@Upload.MaxBytesDisplay</dd></div>
+            <div class="flex justify-between"><dt class="text-slate-500">SignalR message limit</dt><dd class="tabular-nums text-slate-300">@Upload.MaxBytesDisplay</dd></div>
+        </dl>
+        <p class="mt-3 text-[11px] leading-relaxed text-slate-500">
+            Change <code class="text-slate-300">Upload:MaxBytes</code> in appsettings.json. Keep Kestrel and Blazor limits in sync (docs/04 P1).
+        </p>
+    </section>
+
+    <section class="card p-4" aria-labelledby="db-heading">
+        <h2 id="db-heading" class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Database</h2>
+        @if (DbSummary is { } db)
+        {
+            <dl class="space-y-2 text-xs">
+                <div class="flex justify-between"><dt class="text-slate-500">Host</dt><dd class="font-mono text-slate-300">@db.Host:@db.Port</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">Database</dt><dd class="font-mono text-slate-300">@db.Database</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">User</dt><dd class="font-mono text-slate-300">@db.Username</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">Provider</dt><dd class="text-slate-300">PostgreSQL · EF Core 10</dd></div>
+            </dl>
+        }
+        else
+        {
+            <p class="text-xs text-slate-500">Connection string is supplied by <code>PRINTSHELF_CONN</code>.</p>
+        }
+        <a href="/health" class="mt-3 inline-block text-xs link" target="_blank" rel="noopener">Open /health →</a>
+    </section>
+
+    <section class="card p-4" aria-labelledby="export-heading">
+        <h2 id="export-heading" class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Data export</h2>
+        <p class="text-xs text-slate-400">CSV files are UTF-8 with BOM and open directly in Excel.</p>
+        <div class="mt-3 flex flex-wrap gap-2">
+            <a href="/export/models.csv" class="btn-secondary text-xs" download>Catalogue CSV</a>
+            <a href="/export/print-runs.csv" class="btn-secondary text-xs" download>Print runs CSV</a>
+        </div>
+    </section>
+
+    <section class="card p-4" aria-labelledby="security-heading">
+        <h2 id="security-heading" class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Access</h2>
+        <p class="text-xs text-slate-400">
+            No authentication in the MVP (D5). The default bind is <code class="text-slate-200">http://localhost:5100</code>,
+            so only this machine can reach it. Do not expose it to the internet before P7 accounts exist (R-04).
+        </p>
+        <p class="mt-2 text-[11px] text-slate-500">Environment: <span class="text-slate-300">@Env.EnvironmentName</span></p>
+    </section>
+
+    <section class="card p-4 md:col-span-2" aria-labelledby="backup-heading">
+        <h2 id="backup-heading" class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Backup & restore</h2>
+        <p class="text-xs text-slate-400">Back up <span class="text-slate-200">both</span> the database and the data folder — the STLs are the irreplaceable part.</p>
+        <pre class="mt-3 overflow-x-auto rounded border border-slate-800 bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-300">powershell -ExecutionPolicy Bypass -File deploy\backup-printshelf.ps1
+# dump : backups\printshelf-YYYYMMDD-HHmmss.dump
+# files: backups\printshelf-YYYYMMDD-HHmmss-data.zip</pre>
+        <p class="mt-2 text-[11px] text-slate-500">Restore drill steps are in docs/06-deployment.md §5 and docs/08-build-record.md §5.</p>
+    </section>
+</div>
+
+@code {
+    private sealed record DbInfo(string Host, int Port, string Database, string Username);
+
+    private DbInfo? DbSummary
+    {
+        get
+        {
+            string? cs = Config.GetConnectionString("PrintShelf");
+            if (string.IsNullOrWhiteSpace(cs))
+                return null;
+            try
+            {
+                var builder = new NpgsqlConnectionStringBuilder(cs);
+                return new DbInfo(builder.Host ?? "?", builder.Port, builder.Database ?? "?", builder.Username ?? "?");
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+    }
+}

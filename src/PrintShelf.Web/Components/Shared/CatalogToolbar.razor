@@ -1,0 +1,138 @@
+<form class="card p-3 mb-5" @onsubmit="Submit" @onsubmit:preventDefault>
+    <div class="flex flex-col lg:flex-row gap-2">
+        <div class="relative flex-1 min-w-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m16.5 16.5 4 4" />
+            </svg>
+            <input name="search" type="search" class="input pl-9" placeholder="Search name, description or tag…"
+                   aria-label="Search the catalogue" @bind="_search" @bind:event="oninput" />
+        </div>
+
+        <select name="category" class="input lg:w-40" aria-label="Filter by category"
+                value="@_category" @onchange="OnCategoryChanged">
+            <option value="">All categories</option>
+            @foreach (string category in Categories)
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+
+        <select name="tag" class="input lg:w-44" aria-label="Filter by tag"
+                value="@_tag" @onchange="OnTagChanged">
+            <option value="">All tags</option>
+            @foreach (TagUsage tag in Tags)
+            {
+                <option value="@tag.Id">@tag.Label (@tag.ModelCount)</option>
+            }
+        </select>
+
+        <select name="sort" class="input lg:w-48" aria-label="Sort models"
+                value="@_sort" @onchange="OnSortChanged">
+            @foreach (var option in CatalogService.SortOptions)
+            {
+                <option value="@option.Key">@option.Label</option>
+            }
+        </select>
+
+        <button type="submit" class="btn-primary">Search</button>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+        <div class="flex gap-1" role="group" aria-label="View mode">
+            <button type="button" class="@(_view == "grid" ? "btn-toggle-on" : "btn-toggle")"
+                    aria-pressed="@(_view == "grid" ? "true" : "false")" @onclick='() => SetView("grid")'>▦ Grid</button>
+            <button type="button" class="@(_view == "list" ? "btn-toggle-on" : "btn-toggle")"
+                    aria-pressed="@(_view == "list" ? "true" : "false")" @onclick='() => SetView("list")'>☰ List</button>
+        </div>
+
+        @if (FiltersActive)
+        {
+            <button type="button" class="btn-ghost" @onclick="Clear">Clear filters</button>
+        }
+    </div>
+</form>
+
+@code {
+    [Parameter] public string? Search { get; set; }
+    [Parameter] public string? Category { get; set; }
+    [Parameter] public Guid? TagId { get; set; }
+    [Parameter] public string Sort { get; set; } = "newest";
+    [Parameter] public string View { get; set; } = "grid";
+    [Parameter] public IReadOnlyList<string> Categories { get; set; } = [];
+    [Parameter] public IReadOnlyList<TagUsage> Tags { get; set; } = [];
+    [Parameter, EditorRequired] public EventCallback<CatalogFilters> Changed { get; set; }
+
+    private string _search = "";
+    private string _category = "";
+    private string _tag = "";
+    private string _sort = "newest";
+    private string _view = "grid";
+
+    private string? _lastSearch;
+    private string? _lastCategory;
+    private Guid? _lastTag;
+    private string? _lastSort;
+    private string? _lastView;
+
+    private bool FiltersActive =>
+        !string.IsNullOrWhiteSpace(_search) || !string.IsNullOrWhiteSpace(_category) || !string.IsNullOrEmpty(_tag);
+
+    protected override void OnParametersSet()
+    {
+        // Only adopt values that actually changed upstream, so a parent re-render
+        // cannot wipe what the user is currently typing.
+        if (Search != _lastSearch) { _search = Search ?? ""; _lastSearch = Search; }
+        if (Category != _lastCategory) { _category = Category ?? ""; _lastCategory = Category; }
+        if (TagId != _lastTag) { _tag = TagId?.ToString() ?? ""; _lastTag = TagId; }
+        if (Sort != _lastSort) { _sort = Sort ?? "newest"; _lastSort = Sort; }
+        if (View != _lastView) { _view = View ?? "grid"; _lastView = View; }
+    }
+
+    private Task Submit() => Emit();
+
+    private Task OnCategoryChanged(ChangeEventArgs e)
+    {
+        _category = e.Value?.ToString() ?? "";
+        return Emit();
+    }
+
+    private Task OnTagChanged(ChangeEventArgs e)
+    {
+        _tag = e.Value?.ToString() ?? "";
+        return Emit();
+    }
+
+    private Task OnSortChanged(ChangeEventArgs e)
+    {
+        _sort = e.Value?.ToString() ?? "newest";
+        return Emit();
+    }
+
+    private Task SetView(string view)
+    {
+        _view = view;
+        return Emit();
+    }
+
+    private Task Clear()
+    {
+        _search = "";
+        _category = "";
+        _tag = "";
+        _sort = "newest";
+        return Emit();
+    }
+
+    private Task Emit()
+    {
+        Guid? tagId = Guid.TryParse(_tag, out Guid parsed) ? parsed : null;
+        return Changed.InvokeAsync(new CatalogFilters(
+            _search?.Trim() ?? "",
+            string.IsNullOrWhiteSpace(_category) ? null : _category,
+            tagId,
+            _sort,
+            _view));
+    }
+}

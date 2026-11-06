@@ -1,0 +1,122 @@
+@page "/admin/purge"
+@inject CatalogService Catalog
+
+<PageTitle>Purge — PrintShelf</PageTitle>
+
+<PageHeader Title="Purge deleted models" Subtitle="Admin"
+            Description="Deleting a model only hides it. Purging removes the row and, when no other model shares it, the STL file and thumbnail.">
+    <a href="/admin/integrity" class="btn-secondary">Integrity scan</a>
+    <button type="button" class="btn-secondary" disabled="@_busy" @onclick="Reload">Refresh</button>
+</PageHeader>
+
+@if (_message is not null)
+{
+    <p class="mb-3 rounded border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">@_message</p>
+}
+
+@if (_items is null)
+{
+    <div class="card h-40 animate-pulse"></div>
+}
+else if (_items.Count == 0)
+{
+    <EmptyState Title="Nothing to purge" Text="Soft-deleted models appear here. The catalogue is clean.">
+        <a href="/catalogue" class="btn-secondary">Back to catalogue</a>
+    </EmptyState>
+}
+else
+{
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <p class="text-xs text-slate-500">@_items.Count model(s) waiting for permanent removal · @DisplayFormat.Bytes(_items.Sum(i => i.FileBytes)) of files</p>
+        <ConfirmButton Text="Purge all" ConfirmText="@($"Permanently purge all {_items.Count}?")" CssClass="btn-danger text-xs"
+                       OnConfirm="PurgeAll" />
+    </div>
+
+    <div class="card overflow-x-auto">
+        <table class="table-base">
+            <thead>
+                <tr>
+                    <th scope="col">Model</th>
+                    <th scope="col">Deleted</th>
+                    <th scope="col" class="text-right">File</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _items)
+                {
+                    <tr>
+                        <td>
+                            <div class="text-sm text-slate-200">@item.Name</div>
+                            <div class="font-mono text-[10px] text-slate-600">@(item.FileSha256.Trim()[..16])…</div>
+                        </td>
+                        <td class="text-xs text-slate-400 whitespace-nowrap">@DisplayFormat.DateTime(item.DeletedAt)</td>
+                        <td class="text-right text-xs tabular-nums text-slate-400">@DisplayFormat.Bytes(item.FileBytes)</td>
+                        <td class="text-right whitespace-nowrap">
+                            <button type="button" class="btn-ghost text-xs" @onclick="() => Restore(item)">Restore</button>
+                            <ConfirmButton Text="Purge" ConfirmText="Permanently delete?" CssClass="btn-ghost text-xs text-rose-300"
+                                           OnConfirm="() => PurgeOne(item)" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <p class="mt-3 text-[11px] text-slate-500">
+        Content-addressed files shared by “keep both” duplicates survive until the last referencing row is purged.
+    </p>
+}
+
+@code {
+    private IReadOnlyList<DeletedModel>? _items;
+    private bool _busy;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        _items = await Catalog.GetDeletedAsync();
+    }
+
+    private async Task Restore(DeletedModel item)
+    {
+        await Catalog.RestoreAsync(item.Id);
+        _message = $"Restored “{item.Name}”.";
+        await Reload();
+    }
+
+    private async Task PurgeOne(DeletedModel item)
+    {
+        _busy = true;
+        try
+        {
+            await Catalog.PurgeAsync([item.Id]);
+            _message = $"Purged “{item.Name}” and its file (if unreferenced).";
+            await Reload();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PurgeAll()
+    {
+        if (_items is null || _items.Count == 0)
+            return;
+
+        _busy = true;
+        try
+        {
+            int removed = await Catalog.PurgeAsync(_items.Select(i => i.Id));
+            _message = $"Purged {removed} model(s).";
+            await Reload();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

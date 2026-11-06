@@ -1,0 +1,329 @@
+@page "/catalogue"
+@inject CatalogService Catalog
+@inject NavigationManager Nav
+
+<PageTitle>Catalogue — PrintShelf</PageTitle>
+
+<PageHeader Title="Catalogue" Subtitle="Library"
+            Description="Search, filter and sort every model you have uploaded.">
+    <a href="/upload" class="btn-primary">Upload STL</a>
+</PageHeader>
+
+<CatalogToolbar Search="@_filters.Search"
+                Category="@_filters.Category"
+                TagId="@_filters.TagId"
+                Sort="@_filters.Sort"
+                View="@_filters.View"
+                Categories="@_facets.Categories"
+                Tags="@_facets.Tags"
+                Changed="ApplyFilters" />
+
+@if (_error is not null)
+{
+    <div class="card border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-200" role="alert">
+        Could not load the catalogue: @_error
+    </div>
+}
+else if (_result is null)
+{
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        @for (int i = 0; i < 6; i++)
+        {
+            <div class="card h-64 animate-pulse"></div>
+        }
+    </div>
+}
+else if (_result.Total == 0)
+{
+    <EmptyState Title="No models match" Text="Try a different search, or clear the filters to see everything.">
+        <button type="button" class="btn-secondary" @onclick="ClearFilters">Clear filters</button>
+        <a href="/upload" class="btn-primary">Upload an STL</a>
+    </EmptyState>
+}
+else
+{
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <p class="text-xs text-slate-500">
+            @DisplayFormat.Number(_result.Total) model@(_result.Total == 1 ? "" : "s")
+            @if (!string.IsNullOrWhiteSpace(_filters.Search))
+            {
+                <span> matching “@_filters.Search”</span>
+            }
+            @if (ActiveTagLabel is not null)
+            {
+                <span> tagged <span class="chip ml-1">@ActiveTagLabel</span></span>
+            }
+            @if (!string.IsNullOrWhiteSpace(_filters.Category))
+            {
+                <span> in <span class="chip ml-1">@_filters.Category</span></span>
+            }
+        </p>
+        <p class="text-xs text-slate-500">Page @_result.Page of @_result.TotalPages</p>
+    </div>
+
+    <div class="card mb-4 flex flex-wrap items-center gap-3 px-3 py-2" role="region" aria-label="Bulk actions">
+        <label class="flex cursor-pointer items-center gap-2 text-xs text-slate-400">
+            <input type="checkbox" class="h-4 w-4 accent-emerald-500" checked="@AllOnPage"
+                   aria-label="Select all models on this page" @onchange="ToggleSelectPage" />
+            Select page
+        </label>
+
+        @if (_selected.Count > 0)
+        {
+            <span class="badge border-emerald-700 text-emerald-200">@_selected.Count selected</span>
+
+            <select class="input max-w-xs" @bind="_bulkCategory" aria-label="Category for selected models">
+                <option value="">Choose category…</option>
+                <option value="__none">Uncategorised</option>
+                @foreach (string category in _facets.Categories)
+                {
+                    <option value="@category">@category</option>
+                }
+            </select>
+
+            <button type="button" class="btn-primary" disabled="@(_bulkBusy || string.IsNullOrEmpty(_bulkCategory))" @onclick="AssignCategory">
+                @(_bulkBusy ? "Assigning…" : "Apply to selected")
+            </button>
+            <button type="button" class="btn-ghost text-xs" disabled="@_bulkBusy" @onclick="ClearSelection">Clear selection</button>
+        }
+
+        @if (_bulkMessage is not null)
+        {
+            <p class="text-xs @(_bulkError ? "text-rose-300" : "text-emerald-300")" role="@(_bulkError ? "alert" : "status")">
+                @_bulkMessage
+            </p>
+        }
+    </div>
+
+    @if (_filters.View == "list")
+    {
+        <div class="flex flex-col gap-2">
+            @foreach (var model in _result.Items)
+            {
+                <div class="card p-2 flex gap-3 items-center @(_selected.Contains(model.Id) ? "border-emerald-500/70" : "")" @key="model.Id">
+                    <input type="checkbox" class="h-4 w-4 shrink-0 accent-emerald-500" checked="@_selected.Contains(model.Id)"
+                           aria-label="Select @model.Name" @onchange="e => ToggleSelected(model.Id, e)" />
+
+                    <a href="@($"/models/{model.Id}")" class="flex gap-3 items-center min-w-0 flex-1 hover:text-emerald-300">
+                        <div class="w-24 h-20 shrink-0 rounded bg-slate-950/70 flex items-center justify-center overflow-hidden">
+                            @if (model.HasThumb)
+                            {
+                                <img src="@($"/thumbs/{model.Id}?v={model.FileSha256}")" alt="Thumbnail of @model.Name"
+                                     class="h-full w-full object-contain" loading="lazy" />
+                            }
+                            else
+                            {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" class="w-8 h-8 text-slate-700" aria-hidden="true">
+                                    <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" />
+                                    <path d="M3 7l9 4.5L21 7M12 11.5V21" />
+                                </svg>
+                            }
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline gap-2">
+                                <h3 class="font-medium truncate">@model.Name</h3>
+                                @if (!string.IsNullOrWhiteSpace(model.Category))
+                                {
+                                    <span class="text-[11px] text-slate-500 shrink-0">@model.Category</span>
+                                }
+                            </div>
+                            <div class="text-xs text-slate-400 mt-0.5">@model.Dimensions · @DisplayFormat.Number(model.TriCount) triangles</div>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                @foreach (string tag in model.Tags)
+                                {
+                                    <span class="chip">@tag</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="hidden sm:flex flex-col items-end gap-1 text-[11px] text-slate-500 shrink-0 pr-2">
+                            <span>@DisplayFormat.Bytes(model.FileBytes)</span>
+                            <span>@DisplayFormat.Ago(model.CreatedAt)</span>
+                            @if (model.PrintCount > 0)
+                            {
+                                <span class="text-emerald-400">@model.PrintCount print@(model.PrintCount == 1 ? "" : "s")</span>
+                            }
+                        </div>
+                    </a>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            @foreach (var model in _result.Items)
+            {
+                <ModelCard @key="model.Id" Model="model" Selectable="true"
+                           Selected="@_selected.Contains(model.Id)"
+                           SelectedChanged="@(selected => ToggleSelected(model.Id, selected))" />
+            }
+        </div>
+    }
+
+    @if (_result.TotalPages > 1)
+    {
+        <nav class="flex items-center justify-between gap-3 mt-6" aria-label="Pagination">
+            <button type="button" class="btn-secondary" disabled="@(!_result.HasPrevious)"
+                    @onclick="() => GoToPage(_result.Page - 1)">← Previous</button>
+            <span class="text-xs text-slate-500">@_result.Page / @_result.TotalPages</span>
+            <button type="button" class="btn-secondary" disabled="@(!_result.HasNext)"
+                    @onclick="() => GoToPage(_result.Page + 1)">Next →</button>
+        </nav>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "tag")] public string? Tag { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? Category { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? Sort { get; set; }
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
+    private CatalogFilters _filters = new("", null, null, "newest", "grid");
+    private CatalogFacets _facets = new([], []);
+    private PagedResult<ModelSummary>? _result;
+    private string? _error;
+    private readonly HashSet<Guid> _selected = [];
+    private string _bulkCategory = "";
+    private string? _bulkMessage;
+    private bool _bulkError;
+    private bool _bulkBusy;
+
+    private bool AllOnPage =>
+        _result is { Items.Count: > 0 } && _result.Items.All(m => _selected.Contains(m.Id));
+
+    private string? ActiveTagLabel =>
+        _filters.TagId is { } id ? _facets.Tags.FirstOrDefault(t => t.Id == id)?.Label : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _filters = new CatalogFilters(
+            Q?.Trim() ?? "",
+            string.IsNullOrWhiteSpace(Category) ? null : Category,
+            Guid.TryParse(Tag, out Guid tagId) ? tagId : null,
+            CatalogService.SortOptions.Any(o => o.Key == Sort) ? Sort! : "newest",
+            View is "list" ? "list" : "grid");
+
+        _facets = await Catalog.GetFacetsAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        try
+        {
+            _result = await Catalog.SearchAsync(new CatalogQuery(
+                _filters.Search,
+                _filters.TagId,
+                _filters.Category,
+                _filters.Sort,
+                _page,
+                24));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private int _page = 1;
+
+    private async Task ApplyFilters(CatalogFilters filters)
+    {
+        bool narrowing =
+            !string.Equals(filters.Search, _filters.Search, StringComparison.Ordinal) ||
+            !string.Equals(filters.Category, _filters.Category, StringComparison.Ordinal) ||
+            filters.TagId != _filters.TagId;
+
+        _filters = filters;
+        _page = 1;
+        if (narrowing)
+        {
+            _selected.Clear();
+            _bulkMessage = null;
+        }
+        await LoadAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _page = Math.Max(1, page);
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ClearFilters()
+    {
+        _filters = new CatalogFilters("", null, null, "newest", _filters.View);
+        _page = 1;
+        _selected.Clear();
+        _bulkMessage = null;
+        await LoadAsync();
+    }
+
+    private void ToggleSelected(Guid id, bool selected)
+    {
+        if (selected)
+            _selected.Add(id);
+        else
+            _selected.Remove(id);
+        _bulkMessage = null;
+    }
+
+    private void ToggleSelected(Guid id, ChangeEventArgs e) => ToggleSelected(id, e.Value is true);
+
+    private void ToggleSelectPage(ChangeEventArgs e)
+    {
+        if (_result is null)
+            return;
+
+        bool select = e.Value is true;
+        foreach (var model in _result.Items)
+        {
+            if (select)
+                _selected.Add(model.Id);
+            else
+                _selected.Remove(model.Id);
+        }
+        _bulkMessage = null;
+    }
+
+    private void ClearSelection()
+    {
+        _selected.Clear();
+        _bulkMessage = null;
+        _bulkError = false;
+    }
+
+    private async Task AssignCategory()
+    {
+        if (_bulkBusy || _selected.Count == 0 || string.IsNullOrEmpty(_bulkCategory))
+            return;
+
+        _bulkBusy = true;
+        _bulkMessage = null;
+        _bulkError = false;
+        string? category = _bulkCategory == "__none" ? null : _bulkCategory;
+        string label = category ?? "Uncategorised";
+
+        try
+        {
+            int count = await Catalog.AssignCategoryAsync(_selected, category);
+            _selected.Clear();
+            _bulkMessage = count == 1
+                ? $"Assigned 1 model to “{label}”."
+                : $"Assigned {count} models to “{label}”.";
+            await LoadAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _bulkMessage = ex.Message;
+            _bulkError = true;
+        }
+        finally
+        {
+            _bulkBusy = false;
+        }
+    }
+}

@@ -1,0 +1,133 @@
+@import "tailwindcss" source("../src/PrintShelf.Web");
+
+@layer base {
+    html {
+        color-scheme: dark;
+    }
+
+    body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* FocusOnNavigate focuses the page h1 for screen readers; don't draw a box. */
+    h1:focus,
+    h1:focus-visible {
+        outline: none;
+    }
+
+    /* Blazor's own error bar (template styling was removed with Bootstrap). */
+    #blazor-error-ui {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        padding: 1rem 3rem 1rem 1rem;
+        background: #7f1d1d;
+        color: #fff;
+        font-size: 0.875rem;
+        box-shadow: 0 -8px 24px rgb(0 0 0 / 0.4);
+    }
+
+    #blazor-error-ui .reload {
+        color: #fde68a;
+        text-decoration: underline;
+        margin-left: 0.5rem;
+    }
+
+    #blazor-error-ui .dismiss {
+        position: absolute;
+        right: 0.9rem;
+        top: 0.8rem;
+        cursor: pointer;
+    }
+}
+
+@layer components {
+    .nav-link-tailwind {
+        @apply px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-50 no-underline;
+    }
+
+    .nav-link-tailwind.active {
+        @apply bg-slate-800 text-slate-50 font-medium;
+    }
+
+    @media (max-width: 767px) {
+        .nav-link-tailwind {
+            @apply px-2 py-1.5 text-xs;
+        }
+    }
+
+    .card {
+        @apply rounded-lg border border-slate-800 bg-slate-900;
+    }
+
+    .btn-primary {
+        @apply inline-flex items-center justify-center gap-2 rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .btn-secondary {
+        @apply inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .btn-danger {
+        @apply inline-flex items-center justify-center gap-2 rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .btn-ghost {
+        @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-50;
+    }
+
+    .btn-toggle {
+        @apply inline-flex items-center gap-1 rounded-md border border-transparent px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-100;
+    }
+
+    .btn-toggle-on {
+        @apply inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-50;
+    }
+
+    .input {
+        @apply w-full rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500;
+    }
+
+    .label {
+        @apply mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-400;
+    }
+
+    .chip {
+        @apply inline-flex items-center rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-300;
+    }
+
+    .badge {
+        @apply inline-flex items-center rounded border border-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-300;
+    }
+
+    .link {
+        @apply text-emerald-400 underline-offset-2 hover:text-emerald-300 hover:underline;
+    }
+
+    .table-base {
+        @apply w-full text-left text-sm;
+    }
+
+    .table-base thead th {
+        @apply border-b border-slate-800 px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-slate-500;
+    }
+
+    .table-base tbody td {
+        @apply border-b border-slate-800/60 px-3 py-2 align-middle;
+    }
+
+    .table-base tbody tr:hover {
+        @apply bg-slate-800/40;
+    }
+
+    .dropzone {
+        @apply flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/60 px-6 py-12 text-center transition-colors cursor-pointer hover:border-emerald-500/70 hover:bg-slate-900;
+    }
+
+    .dropzone.is-dragover {
+        @apply border-emerald-400 bg-emerald-950/30;
+    }
+}

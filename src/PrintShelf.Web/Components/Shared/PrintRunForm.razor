@@ -1,0 +1,235 @@
+@inject PrintRunService Runs
+
+<form class="card p-4" @onsubmit="Save" @onsubmit:preventDefault>
+    <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="text-sm font-semibold text-slate-100">@(Run is null ? "Add print run" : "Edit print run")</h3>
+        <button type="button" class="btn-ghost text-xs" @onclick="Cancel">Cancel</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <p class="mb-3 rounded border border-rose-800 bg-rose-950/40 px-3 py-2 text-xs text-rose-200" role="alert">@_error</p>
+    }
+
+    <div class="grid sm:grid-cols-2 gap-3">
+        <div class="sm:col-span-2">
+            <label class="label" for="printer">Printer *</label>
+            <input id="printer" name="printer" class="input" list="printer-suggestions" required
+                   placeholder="e.g. Prusa MK4" @bind="_printer" />
+            <datalist id="printer-suggestions">
+                @foreach (string printer in Printers)
+                {
+                    <option value="@printer"></option>
+                }
+            </datalist>
+        </div>
+
+        <div>
+            <label class="label" for="material">Material</label>
+            <input id="material" name="material" class="input" list="material-suggestions"
+                   placeholder="PLA, PETG…" @bind="_material" />
+            <datalist id="material-suggestions">
+                @foreach (string material in Materials)
+                {
+                    <option value="@material"></option>
+                }
+            </datalist>
+        </div>
+
+        <div>
+            <label class="label" for="color">Colour</label>
+            <input id="color" name="color" class="input" placeholder="Black" @bind="_color" />
+        </div>
+
+        <div>
+            <label class="label" for="nozzle">Nozzle (mm)</label>
+            <input id="nozzle" name="nozzle" class="input" type="number" step="0.01" min="0.01" max="10"
+                   placeholder="0.4" @bind="_nozzle" />
+        </div>
+
+        <div>
+            <label class="label" for="layer">Layer height (mm)</label>
+            <input id="layer" name="layer" class="input" type="number" step="0.001" min="0.001" max="10"
+                   placeholder="0.2" @bind="_layer" />
+        </div>
+
+        <div>
+            <label class="label" for="duration">Duration (minutes)</label>
+            <input id="duration" name="duration" class="input" type="number" min="0" step="1"
+                   placeholder="180" @bind="_duration" />
+        </div>
+
+        <div>
+            <label class="label" for="result">Result *</label>
+            <select id="result" name="result" class="input" @bind="_result">
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+                <option value="partial">Partial</option>
+            </select>
+        </div>
+
+        <div>
+            <label class="label" for="cost">Cost</label>
+            <input id="cost" name="cost" class="input" type="number" step="0.01" min="0"
+                   placeholder="2.50" @bind="_cost" />
+        </div>
+
+        <div>
+            <label class="label" for="printed-at">Printed on</label>
+            <input id="printed-at" name="printed-at" class="input" type="date" value="@_printedDate.ToString("yyyy-MM-dd")"
+                   @onchange="OnDateChanged" />
+        </div>
+
+        <div class="sm:col-span-2">
+            <label class="label" for="notes">Notes</label>
+            <textarea id="notes" name="notes" class="input min-h-20" rows="2"
+                      placeholder="Settings that worked, failure reason…" @bind="_notes"></textarea>
+        </div>
+    </div>
+
+    <div class="mt-4 flex justify-end">
+        <button type="submit" class="btn-primary">@(Run is null ? "Record print" : "Save changes")</button>
+    </div>
+</form>
+
+@code {
+    [Parameter, EditorRequired] public Guid ModelId { get; set; }
+    [Parameter] public PrintRun? Run { get; set; }
+    [Parameter] public IReadOnlyList<string> Printers { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> Materials { get; set; } = [];
+    [Parameter, EditorRequired] public EventCallback OnSaved { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnCancel { get; set; }
+
+    private string _printer = "";
+    private string _material = "";
+    private string _color = "";
+    private string _nozzle = "";
+    private string _layer = "";
+    private string _duration = "";
+    private string _result = PrintResults.Success;
+    private string _cost = "";
+    private string _notes = "";
+    private DateTime _printedDate = DateTime.Today;
+    private string? _error;
+    private Guid? _loadedRunId;
+
+    protected override void OnParametersSet()
+    {
+        if (Run?.Id == _loadedRunId)
+            return;
+
+        _loadedRunId = Run?.Id;
+        _error = null;
+
+        if (Run is null)
+        {
+            _printer = "";
+            _material = "";
+            _color = "";
+            _nozzle = "";
+            _layer = "";
+            _duration = "";
+            _result = PrintResults.Success;
+            _cost = "";
+            _notes = "";
+            _printedDate = DateTime.Today;
+            return;
+        }
+
+        _printer = Run.Printer;
+        _material = Run.Material ?? "";
+        _color = Run.Color ?? "";
+        _nozzle = Run.NozzleMm?.ToString("0.##") ?? "";
+        _layer = Run.LayerMm?.ToString("0.###") ?? "";
+        _duration = Run.DurationMin?.ToString() ?? "";
+        _result = Run.Result;
+        _cost = Run.Cost?.ToString("0.00") ?? "";
+        _notes = Run.Notes ?? "";
+        _printedDate = Run.PrintedAt.LocalDateTime.Date;
+    }
+
+    private void OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out DateTime date))
+            _printedDate = date;
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+
+        if (!TryParseDecimal(_nozzle, out decimal? nozzle) ||
+            !TryParseDecimal(_layer, out decimal? layer) ||
+            !TryParseDecimal(_cost, out decimal? cost) ||
+            !TryParseInt(_duration, out int? duration))
+        {
+            _error = "One of the numbers is not valid.";
+            return;
+        }
+
+        var input = new PrintRunInput(
+            _printer,
+            Blank(_material),
+            Blank(_color),
+            nozzle,
+            layer,
+            duration,
+            _result,
+            cost,
+            Blank(_notes),
+            new DateTimeOffset(DateTime.SpecifyKind(_printedDate.Date, DateTimeKind.Local)).ToUniversalTime());
+
+        PrintRunResult result = Run is null
+            ? await Runs.AddAsync(ModelId, input)
+            : await Runs.UpdateAsync(Run.Id, input);
+
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        if (Run is null)
+        {
+            _printer = "";
+            _material = "";
+            _color = "";
+            _nozzle = "";
+            _layer = "";
+            _duration = "";
+            _cost = "";
+            _notes = "";
+            _result = PrintResults.Success;
+            _printedDate = DateTime.Today;
+            _loadedRunId = null;
+        }
+
+        await OnSaved.InvokeAsync();
+    }
+
+    private Task Cancel() => OnCancel.InvokeAsync();
+
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool TryParseDecimal(string value, out decimal? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        if (!decimal.TryParse(value, out decimal d))
+            return false;
+        parsed = d;
+        return true;
+    }
+
+    private static bool TryParseInt(string value, out int? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        if (!int.TryParse(value, out int i))
+            return false;
+        parsed = i;
+        return true;
+    }
+}

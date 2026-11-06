@@ -1,0 +1,23 @@
+<div class="card border-dashed p-10 text-center">
+    <div class="mx-auto mb-3 w-10 h-10 text-slate-600">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" />
+            <path d="M3 7l9 4.5L21 7M12 11.5V21" />
+        </svg>
+    </div>
+    <h2 class="text-base font-semibold text-slate-200">@Title</h2>
+    @if (!string.IsNullOrWhiteSpace(Text))
+    {
+        <p class="text-sm text-slate-400 mt-1 max-w-prose mx-auto">@Text</p>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="mt-4 flex flex-wrap justify-center gap-2">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

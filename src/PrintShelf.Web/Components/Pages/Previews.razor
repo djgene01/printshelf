@@ -1,0 +1,200 @@
+@page "/admin/previews"
+@inject CatalogService Catalog
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Preview generation — PrintShelf</PageTitle>
+
+<PageHeader Title="Preview generation" Subtitle="Admin"
+            Description="Render each STL in a browser WebGL canvas and store the PNG thumbnail used by the catalogue. No external renderer is needed.">
+    <a href="/admin/integrity" class="btn-secondary">Integrity scan</a>
+</PageHeader>
+
+@if (_message is not null)
+{
+    <p class="mb-3 rounded border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">@_message</p>
+}
+
+<div class="grid sm:grid-cols-4 gap-3">
+    <div class="card p-4">
+        <div class="text-[10px] uppercase tracking-wider text-slate-500">Live models</div>
+        <div class="text-2xl font-semibold tabular-nums mt-1">@_allCount</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] uppercase tracking-wider text-slate-500">Missing previews</div>
+        <div class="text-2xl font-semibold tabular-nums mt-1">@_candidates.Count</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] uppercase tracking-wider text-slate-500">Generated this session</div>
+        <div class="text-2xl font-semibold tabular-nums mt-1 text-emerald-300">@_generated</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] uppercase tracking-wider text-slate-500">Render settings</div>
+        <div class="text-sm text-slate-300 mt-1">480 × 360 PNG · studio lighting + shadow</div>
+    </div>
+</div>
+
+<div class="card p-4 mt-4">
+    <h2 class="text-sm font-semibold text-slate-200">Render previews from STL</h2>
+    <p class="text-xs text-slate-400 mt-1 max-w-prose">
+        Each model is loaded from its stored STL, framed automatically, rendered in your browser and
+        posted back as a PNG. This is the same renderer used on the model page, so the thumbnail
+        matches the interactive preview. Large libraries can take a few minutes; keep this tab open.
+    </p>
+
+    @if (_candidates.Count == 0)
+    {
+        <p class="mt-4 rounded border border-emerald-800/60 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-200">
+            ✓ Every live model already has a preview.
+        </p>
+    }
+    else
+    {
+        <button type="button" class="btn-primary mt-4" disabled="@_busy" @onclick="GenerateAsync">
+            @if (_busy)
+            {
+                <span>Generating @_done / @_total…</span>
+            }
+            else
+            {
+                <span>Generate @_candidates.Count missing preview@(_candidates.Count == 1 ? "" : "s")</span>
+            }
+        </button>
+    }
+
+    <ConfirmButton Text="@($"Regenerate all {_allCount} previews")"
+                   ConfirmText="Click again to overwrite every thumbnail"
+                   CssClass="btn-secondary mt-4 ml-2"
+                   Disabled="@_busy"
+                   OnConfirm="RegenerateAllAsync" />
+
+    @if (_busy)
+    {
+        <div class="mt-4" role="status" aria-live="polite">
+            <div class="h-2 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full bg-emerald-500 transition-[width] duration-200"
+                     style="@($"width:{(int)Math.Round(_total == 0 ? 0 : _done * 100.0 / _total)}%")"></div>
+            </div>
+            <p class="mt-2 text-xs text-slate-400">
+                @_done of @_total · @_ok generated, @_failed failed
+                @if (!string.IsNullOrWhiteSpace(_current))
+                {
+                    <span class="text-slate-600"> · @_current</span>
+                }
+            </p>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<ThumbCandidate> _candidates = [];
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<Previews>? _dotNetRef;
+    private bool _busy;
+    private int _done;
+    private int _total;
+    private int _ok;
+    private int _failed;
+    private int _generated;
+    private int _allCount;
+    private string? _current;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _candidates = await Catalog.ListMissingPreviewsAsync();
+        _allCount = (await Catalog.ListAllPreviewsAsync()).Count;
+    }
+
+    private Task GenerateAsync() => RunAsync(_candidates, "Generated");
+
+    private async Task RegenerateAllAsync()
+    {
+        if (_busy)
+            return;
+
+        IReadOnlyList<ThumbCandidate> all = await Catalog.ListAllPreviewsAsync();
+        await RunAsync(all, "Regenerated");
+    }
+
+    private async Task RunAsync(IReadOnlyList<ThumbCandidate> items, string verb)
+    {
+        if (_busy || items.Count == 0)
+            return;
+
+        _busy = true;
+        _done = 0;
+        _ok = 0;
+        _failed = 0;
+        _total = items.Count;
+        _message = null;
+        _current = null;
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/stl-viewer.js");
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+
+            var source = items.ToArray();
+            int ok = 0;
+            int failed = 0;
+
+            // Keep each JS interop call short. A single multi-minute call can
+            // outlive the Blazor circuit; chunks of 50 also make a retry cheap.
+            const int chunkSize = 50;
+            for (int start = 0; start < source.Length; start += chunkSize)
+            {
+                var chunk = source.Skip(start).Take(chunkSize)
+                    .Select(c => new { id = c.Id, name = c.Name, color = c.Color }).ToArray();
+                int[] result = await _module.InvokeAsync<int[]>(
+                    "generatePreviews", chunk, _dotNetRef, start, source.Length);
+                ok += result.Length > 0 ? result[0] : 0;
+                failed += result.Length > 1 ? result[1] : 0;
+                _done = Math.Min(start + chunk.Length, source.Length);
+                _ok = ok;
+                _failed = failed;
+                StateHasChanged();
+            }
+
+            _generated += ok;
+            _message = $"{verb} {ok} preview(s)" + (failed > 0 ? $"; {failed} failed — see the browser console for details." : ".");
+            await LoadAsync();
+        }
+        catch (JSException ex)
+        {
+            _message = "Preview generation failed: " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            _current = null;
+        }
+    }
+
+    [JSInvokable]
+    public Task OnPreviewProgress(int done, int total, string name, int ok, int failed)
+    {
+        // ok/failed are chunk-local; the overall totals are updated after each
+        // chunk in RunAsync. Updating them here would make the counter jump back.
+        _done = done;
+        _total = total;
+        _current = name;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try { await _module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        _dotNetRef?.Dispose();
+    }
+}

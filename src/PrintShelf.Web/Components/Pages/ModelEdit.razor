@@ -1,0 +1,157 @@
+@page "/models/{Id:guid}/edit"
+@inject CatalogService Catalog
+@inject CategoryService Categories
+@inject NavigationManager Nav
+
+<PageTitle>Edit @(_model?.Name ?? "model") — PrintShelf</PageTitle>
+
+@if (_loading)
+{
+    <div class="card h-72 animate-pulse"></div>
+}
+else if (_model is null)
+{
+    <EmptyState Title="Model not found" Text="It may have been deleted, or the link is wrong.">
+        <a href="/catalogue" class="btn-primary">Back to catalogue</a>
+    </EmptyState>
+}
+else
+{
+    <PageHeader Title="Edit details" Subtitle="@_model.Name"
+                Description="Metadata only — the STL file and its geometry stats never change here.">
+        <a href="@($"/models/{_model.Id}")" class="btn-secondary">Cancel</a>
+    </PageHeader>
+
+    @if (_error is not null)
+    {
+        <p class="mb-3 rounded border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-200" role="alert">@_error</p>
+    }
+
+    <form class="card p-4 max-w-3xl" @onsubmit="Save" @onsubmit:preventDefault>
+        <div class="grid sm:grid-cols-2 gap-4">
+            <div class="sm:col-span-2">
+                <label class="label" for="name">Name *</label>
+                <input id="name" name="name" class="input" required maxlength="180" @bind="_name" />
+            </div>
+
+            <div>
+                <label class="label" for="category">Category</label>
+                <select id="category" name="category" class="input" @bind="_category">
+                    <option value="">Uncategorised</option>
+                    @foreach (var category in _categories)
+                    {
+                        <option value="@category.Name">@category.Name</option>
+                    }
+                </select>
+                <p class="mt-1 text-[11px] text-slate-500">
+                    The category's material colour is used in the 3D preview.
+                    <a class="link" href="/categories">Manage categories →</a>
+                </p>
+            </div>
+
+            <div>
+                <label class="label" for="unit">STL unit (no unit inside the file)</label>
+                <select id="unit" name="unit" class="input" @bind="_unit">
+                    <option value="mm">Millimetres (mm)</option>
+                    <option value="cm">Centimetres (cm)</option>
+                    <option value="in">Inches (in)</option>
+                </select>
+            </div>
+
+            <div class="sm:col-span-2">
+                <label class="label" for="description">Description</label>
+                <textarea id="description" name="description" class="input min-h-28" rows="4" @bind="_description"></textarea>
+            </div>
+
+            <div class="sm:col-span-2">
+                <span class="label">Tags</span>
+                @if (_allTags.Count == 0)
+                {
+                    <p class="text-xs text-slate-500">No tags exist yet. <a class="link" href="/tags">Create tags →</a></p>
+                }
+                else
+                {
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var tag in _allTags)
+                        {
+                            <label class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-500">
+                                <input type="checkbox" class="accent-emerald-500" checked="@_selected.Contains(tag.Id)"
+                                       @onchange="e => ToggleTag(tag.Id, e)" />
+                                @tag.Label
+                                <span class="text-slate-500">@tag.ModelCount</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="mt-5 flex items-center justify-end gap-2">
+            <a href="@($"/models/{_model.Id}")" class="btn-secondary">Cancel</a>
+            <button type="submit" class="btn-primary">Save changes</button>
+        </div>
+    </form>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private StlModel? _model;
+    private bool _loading = true;
+    private string _name = "";
+    private string _description = "";
+    private string _category = "";
+    private string _unit = "mm";
+    private string? _error;
+    private IReadOnlyList<TagUsage> _allTags = [];
+    private IReadOnlyList<CategoryInfo> _categories = [];
+    private readonly HashSet<Guid> _selected = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = await Catalog.GetModelAsync(Id);
+        if (_model is not null)
+        {
+            _name = _model.Name;
+            _description = _model.Description ?? "";
+            _category = _model.Category ?? "";
+            _unit = _model.PrintUnit;
+            foreach (var link in _model.ModelTags)
+                _selected.Add(link.TagId);
+        }
+
+        var facets = await Catalog.GetFacetsAsync();
+        _categories = await Categories.ListAsync();
+        _allTags = facets.Tags.OrderBy(t => t.Label).ToList();
+        _loading = false;
+    }
+
+    private void ToggleTag(Guid tagId, ChangeEventArgs e)
+    {
+        if (e.Value is true)
+            _selected.Add(tagId);
+        else
+            _selected.Remove(tagId);
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _error = "Name is required.";
+            return;
+        }
+
+        bool ok = await Catalog.UpdateMetadataAsync(Id, new ModelEditInput(
+            _name, _description, _category, _unit, _selected.ToList()));
+
+        if (!ok)
+        {
+            _error = "Could not save. The model may have been deleted.";
+            return;
+        }
+
+        Nav.NavigateTo($"/models/{Id}");
+    }
+}

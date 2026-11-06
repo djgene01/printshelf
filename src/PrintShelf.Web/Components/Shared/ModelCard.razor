@@ -1,0 +1,81 @@
+<div class="card group overflow-hidden flex flex-col hover:border-slate-600 transition-colors @(Selected ? "border-emerald-500/70" : "")">
+    @if (Selectable)
+    {
+        <label class="flex cursor-pointer items-center gap-2 border-b border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-400">
+            <input type="checkbox" class="h-4 w-4 accent-emerald-500" checked="@Selected"
+                   aria-label="Select @Model.Name" @onchange="OnSelectionChanged" />
+            <span>Select</span>
+            <span class="ml-auto text-[10px] uppercase tracking-wide text-slate-500">@Model.PrintUnit</span>
+        </label>
+    }
+
+    <a href="@($"/models/{Model.Id}")"
+       class="flex flex-1 flex-col focus-visible:outline-2 focus-visible:outline-emerald-400">
+        <div class="aspect-[4/3] bg-slate-950/70 relative overflow-hidden">
+            @if (Model.HasThumb)
+            {
+                <img src="@($"/thumbs/{Model.Id}?v={Model.FileSha256}")" alt="Thumbnail of @Model.Name"
+                     class="h-full w-full object-contain" loading="lazy" width="320" height="240" />
+            }
+            else
+            {
+                <div class="h-full w-full flex flex-col items-center justify-center gap-2 text-slate-700">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" class="w-12 h-12" aria-hidden="true">
+                        <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" />
+                        <path d="M3 7l9 4.5L21 7M12 11.5V21" />
+                    </svg>
+                    <span class="text-[11px] text-slate-600">Preview to create thumbnail</span>
+                </div>
+            }
+            @if (!Selectable)
+            {
+                <span class="absolute top-2 left-2 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">
+                    @Model.PrintUnit
+                </span>
+            }
+            @if (Model.PrintCount > 0)
+            {
+                <span class="absolute top-2 right-2 rounded bg-emerald-500/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-950">
+                    @Model.PrintCount print@(Model.PrintCount == 1 ? "" : "s")
+                </span>
+            }
+        </div>
+
+        <div class="p-3 flex flex-col gap-1.5 flex-1">
+            <div class="flex items-start justify-between gap-2">
+                <h3 class="font-medium leading-snug line-clamp-2 group-hover:text-emerald-300">@Model.Name</h3>
+                <span class="shrink-0 text-[11px] text-slate-500 tabular-nums">@DisplayFormat.Number(Model.TriCount) tris</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.Category))
+            {
+                <div class="text-[11px] text-slate-500" data-testid="model-category">@Model.Category</div>
+            }
+            <div class="text-xs text-slate-400">@Model.Dimensions</div>
+            @if (Model.Tags.Count > 0)
+            {
+                <div class="flex flex-wrap gap-1 pt-0.5">
+                    @foreach (string tag in Model.Tags)
+                    {
+                        <span class="chip">@tag</span>
+                    }
+                </div>
+            }
+            <div class="mt-auto pt-1 flex items-center justify-between text-[11px] text-slate-500">
+                <span>@DisplayFormat.Bytes(Model.FileBytes)</span>
+                <span>@DisplayFormat.Ago(Model.CreatedAt)</span>
+            </div>
+        </div>
+    </a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ModelSummary Model { get; set; } = default!;
+    [Parameter] public bool Selectable { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback<bool> SelectedChanged { get; set; }
+
+    private async Task OnSelectionChanged(ChangeEventArgs e)
+    {
+        await SelectedChanged.InvokeAsync(e.Value is true);
+    }
+}
